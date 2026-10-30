@@ -46,6 +46,11 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const grant = token => () => `${REDIRECT}#access_token=${token}&token_type=Bearer&expires_in=3599`;
+const PHOTO_A = 'https://lh3.googleusercontent.com/a/foto-a=s96-c';
+const photoFor = photos => init => {
+  const picture = photos[init.headers.Authorization.replace('Bearer ', '')];
+  return picture ? { body: { sub: '1', picture } } : { status: 401, body: {} };
+};
 const profileFor = tokens => init => {
   const email = tokens[init.headers.Authorization.replace('Bearer ', '')];
   return email ? { body: { emailAddress: email, historyId: '100' } } : { status: 401, body: {} };
@@ -74,6 +79,7 @@ async function connectFirst() {
 
   authAnswer = grant('tok-a');
   responses.set('GET /profile', profileFor({ 'tok-a': 'a@gmail.com' }));
+  responses.set('GET /oauth2/v3/userinfo', photoFor({ 'tok-a': PHOTO_A }));
   responses.set('GET /messages', { body: { messages: [{ id: 'm1' }, { id: 'm2' }] } });
   responses.set('GET /messages/m1', { body: message({ id: 'm1', from: 'Fish Audio <noreply@fish.audio>', subject: 'Seu código', text: 'Use este código para continuar.\n\n179542\n', date: 2000 }) });
   responses.set('GET /messages/m2', { body: message({ id: 'm2', subject: 'Ofertas', text: 'Promoções', date: 1000 }) });
@@ -82,7 +88,8 @@ async function connectFirst() {
   eq('login abre o seletor de contas do Google', [auth.interactive, auth.prompt], [true, 'select_account']);
   eq('pedido de acesso usa client ID, escopo e redirecionamento certos',
     [auth.params.get('client_id'), auth.params.get('scope'), auth.params.get('redirect_uri'), auth.params.get('response_type')],
-    ['123-abc.apps.googleusercontent.com', 'https://www.googleapis.com/auth/gmail.modify', REDIRECT, 'token']);
+    ['123-abc.apps.googleusercontent.com', 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/userinfo.profile', REDIRECT, 'token']);
+  eq('guarda a foto de perfil do Google da conta', settings().photos, { 'a@gmail.com': PHOTO_A });
   eq('login conecta a conta escolhida', [r.ok, r.email, settings().accounts, settings().accountEmail], [true, 'a@gmail.com', ['a@gmail.com'], 'a@gmail.com']);
   const st = await bg.getState();
   eq('primeira leitura usa as últimas 24 h', decodeURIComponent(calls.find(c => c.key === 'GET /messages').query).includes('newer_than:1d'), true);
@@ -144,6 +151,7 @@ async function secondAccount() {
   responses.set('GET /messages', { body: { messages: [] } });
   const r = await dispatch({ type: 'connect' });
   eq('segunda conta entra na lista e vira a atual', [r.email, settings().accounts, settings().accountEmail], ['b@gmail.com', ['a@gmail.com', 'b@gmail.com'], 'b@gmail.com']);
+  eq('sem foto disponível a conta entra mesmo assim, sem foto', settings().photos, { 'a@gmail.com': PHOTO_A, 'b@gmail.com': null });
   eq('trocar de conta limpa a lista anterior', (await bg.getState()).results, []);
 
   const before = authCalls.length;
@@ -153,6 +161,7 @@ async function secondAccount() {
   await dispatch({ type: 'forget', email: 'a@gmail.com' });
   eq('desconectar a conta atual passa para a outra', [settings().accounts, settings().accountEmail], [['b@gmail.com'], 'b@gmail.com']);
   eq('token da conta desconectada sai da memória', Object.keys((await bg.getState()).tokens), ['b@gmail.com']);
+  eq('foto da conta desconectada sai junto', settings().photos, { 'b@gmail.com': null });
 }
 
 async function expiredHistory() {

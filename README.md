@@ -43,7 +43,7 @@ Se o Google mudar o nome dos menus, procure por *APIs e serviços → Credenciai
 1. No popup, clique em **Entrar com Google**.
 2. Escolha a conta ou entre numa nova.
 3. O Google avisa que o app não foi verificado. Isso é esperado, porque o app é seu e está em teste: clique em **Continuar**.
-4. Autorize o acesso ao Gmail.
+4. Autorize o acesso ao Gmail e ao seu perfil. O perfil serve só para mostrar a sua foto no topo do popup.
 
 O popup mostra "Conectado a voce@gmail.com" e o ícone mostra **OK** em verde. A partir daí, cada código novo aparece no popup.
 
@@ -104,7 +104,7 @@ If Google renames the menus, look for *APIs & Services → Credentials* and *OAu
 1. In the popup, click **Entrar com Google** (Sign in with Google).
 2. Pick an account or sign in with a new one.
 3. Google warns that the app is unverified. That is expected, because the app is yours and in testing: click **Continue**.
-4. Allow access to Gmail.
+4. Allow access to Gmail and to your profile. The profile is only used to show your photo at the top of the popup.
 
 The popup shows "Conectado a you@gmail.com" (Connected) and the icon shows a green **OK**. From then on, every new code appears in the popup.
 

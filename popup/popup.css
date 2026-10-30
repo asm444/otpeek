@@ -288,6 +288,9 @@ button.pill:hover, button.pill[aria-expanded="true"] { border-color: var(--accen
   text-transform: uppercase;
 }
 
+.avatar.photo { overflow: hidden; background: var(--line); }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+
 .accounts { display: grid; gap: 6px; }
 .accounts .loading { color: var(--muted); padding: 6px 2px; animation: pulse 1.2s ease-in-out infinite; }
 button.account {

@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const DEFAULTS = {
   clientId: '',
   accounts: [],
+  photos: {},
   accountEmail: null,
   enabled: true,
   intervalSec: 10,
@@ -108,6 +109,25 @@ function renderItem(result) {
   return li;
 }
 
+function paintAvatar(el, email) {
+  const photo = email && settings.photos[email];
+  el.classList.toggle('photo', Boolean(photo));
+  if (!photo) {
+    el.textContent = email ? email[0] : '?';
+    return;
+  }
+  if (el.firstElementChild?.src === photo) return;
+  const img = document.createElement('img');
+  img.alt = '';
+  img.referrerPolicy = 'no-referrer';
+  img.src = photo;
+  img.addEventListener('error', () => {
+    el.classList.remove('photo');
+    el.textContent = email[0];
+  });
+  el.replaceChildren(img);
+}
+
 function renderAccounts() {
   $('accounts').replaceChildren(...settings.accounts.map((email, i) => {
     const li = document.createElement('li');
@@ -118,7 +138,7 @@ function renderAccounts() {
     btn.setAttribute('aria-checked', String(email === settings.accountEmail));
     btn.style.animationDelay = `${i * 40}ms`;
     btn.innerHTML = '<span class="avatar"></span><span class="email"></span><svg class="check" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
-    btn.querySelector('.avatar').textContent = email[0];
+    paintAvatar(btn.querySelector('.avatar'), email);
     btn.querySelector('.email').textContent = email;
     btn.addEventListener('click', async () => {
       await send({ type: 'select', email });
@@ -170,7 +190,7 @@ async function render() {
   const email = settings.accountEmail;
   $('account-pill').hidden = !email;
   $('account-name').textContent = email || '';
-  $('account-avatar').textContent = email ? email[0] : '?';
+  paintAvatar($('account-avatar'), email);
   $('account-pill').title = email ? `${email}. Clique para trocar de conta.` : '';
   $('refresh').hidden = !email;
 

@@ -1,4 +1,4 @@
-import { authorize, AuthError } from './src/auth.js';
+import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
@@ -6,6 +6,7 @@ import { extract } from './src/extract.js';
 export const DEFAULTS = {
   clientId: '',
   accounts: [],
+  photos: {},
   accountEmail: null,
   enabled: true,
   intervalSec: 10,
@@ -199,11 +200,13 @@ async function connect({ email = null } = {}) {
   const { emailAddress } = await gmailClient(async () => auth.token, async () => {}).profile();
   await cacheToken(emailAddress, auth);
   const accounts = s.accounts.includes(emailAddress) ? s.accounts : [...s.accounts, emailAddress];
+  const photo = await profilePhoto(auth.token);
+  const photos = { ...s.photos, [emailAddress]: photo || s.photos[emailAddress] || null };
   if (emailAddress === s.accountEmail) {
-    await saveSettings({ accounts });
+    await saveSettings({ accounts, photos });
     await loop();
   } else {
-    await switchTo(emailAddress, { accounts });
+    await switchTo(emailAddress, { accounts, photos });
   }
   return { ok: true, email: emailAddress };
 }
@@ -218,9 +221,10 @@ async function select({ email }) {
 async function forget({ email }) {
   const s = await getSettings();
   const accounts = s.accounts.filter(a => a !== email);
+  const { [email]: _, ...photos } = s.photos;
   await dropToken(email);
-  if (email === s.accountEmail) await switchTo(accounts[0] ?? null, { accounts });
-  else await saveSettings({ accounts });
+  if (email === s.accountEmail) await switchTo(accounts[0] ?? null, { accounts, photos });
+  else await saveSettings({ accounts, photos });
   return { ok: true };
 }
 
