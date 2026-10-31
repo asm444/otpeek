@@ -10,7 +10,8 @@ const perms = { granted: false, added: [], removed: [] };
 const scripts = [];
 let popupsOpened = 0;
 let popupRefused = false;
-const windowsCreated = [];
+const popupWindows = [];
+const windowFocus = [];
 const badge = { text: '' };
 const calls = [];
 const authCalls = [];
@@ -50,8 +51,8 @@ globalThis.chrome = {
     registerContentScripts: async list => { scripts.push(...list); },
     unregisterContentScripts: async () => { scripts.length = 0; },
   },
-  windows: { create: async opts => { windowsCreated.push(opts); } },
-  action: { openPopup: async () => { if (popupRefused) throw new Error('Could not find an active browser window.'); popupsOpened++; }, setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
+  windows: { getLastFocused: async () => ({ id: 7 }), update: async (id, opts) => { windowFocus.push([id, opts.focused]); } },
+  action: { openPopup: async (opts = {}) => { if (popupRefused && !opts.windowId) throw new Error('Could not find an active browser window.'); if (opts.windowId) popupWindows.push(opts.windowId); popupsOpened++; }, setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
 };
 
 globalThis.fetch = async (url, init = {}) => {
@@ -335,7 +336,7 @@ async function popupFallback() {
   await send({ type: 'loginDetected', email: 'e1@y.com' }, fromSite('https://janela.example/login'));
   await send({ type: 'loginDetected', email: 'e2@y.com' }, fromSite('https://janela.example/login'));
   popupRefused = false;
-  eq('sem janela ativa, abre o popup numa janela própria', windowsCreated.map(w => [w.url, w.type]), [['http://extensao.test/popup/popup.html', 'popup']]);
+  eq('sem janela ativa, foca a última janela e abre o popup da extensão nela', [windowFocus, popupWindows], [[[7, true]], [7]]);
   await dispatch({ type: 'dismissDuration' });
   eq('agora não encerra o pedido', (await bg.getState()).askDuration, null);
 }

@@ -55,7 +55,7 @@ O popup mostra "Conectado a voce@gmail.com" e o ícone mostra **OK** em verde. A
 
 ### Código novo
 
-Quando chega um código novo, o popup abre sozinho e mostra o código em destaque, a caixa que o recebeu e a mensagem. Ele fecha em 15 segundos, a menos que você mexa nele. Se o Chrome não tiver janela ativa, o código abre numa janela pequena.
+Quando chega um código novo, o popup abre sozinho e mostra o código em destaque, a caixa que o recebeu e a mensagem. Ele fecha em 15 segundos, a menos que você mexa nele. Se o Chrome não estiver em foco, o popup abre na última janela usada.
 
 ### Atualizar
 
@@ -144,7 +144,7 @@ The popup shows "Conectado a you@gmail.com" (Connected) and the icon shows a gre
 
 ### New code
 
-When a new code arrives, the popup opens by itself and shows the code, the mailbox that received it and the message. It closes after 15 seconds unless you interact with it. If Chrome has no active window, the code opens in a small window.
+When a new code arrives, the popup opens by itself and shows the code, the mailbox that received it and the message. It closes after 15 seconds unless you interact with it. If Chrome is not focused, the popup opens in the last window used.
 
 ### Update
 

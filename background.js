@@ -131,7 +131,13 @@ async function openPopup() {
   try {
     await chrome.action.openPopup();
   } catch {
-    await chrome.windows.create({ url: chrome.runtime.getURL('popup/popup.html'), type: 'popup', width: 380, height: 560 });
+    try {
+      const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+      await chrome.windows.update(win.id, { focused: true });
+      await chrome.action.openPopup({ windowId: win.id });
+    } catch {
+      return;
+    }
   }
 }
 
