@@ -47,6 +47,25 @@
     </div>
   </section>
 
+  <section id="duration-view" class="view" hidden>
+    <div class="card">
+      <div class="setting col">
+        <div class="label"><strong>Lembrete para <span id="duration-host"></span></strong><small>Por quanto tempo o e-mail anterior fica riscado neste site? A escolha vale sempre para ele.</small></div>
+        <select id="duration-select" aria-label="Duração do lembrete">
+          <option value="43200000">12 horas</option>
+          <option value="86400000" selected>1 dia</option>
+          <option value="259200000">3 dias</option>
+          <option value="604800000">1 semana</option>
+          <option value="2592000000">30 dias</option>
+        </select>
+        <div class="field">
+          <button id="save-duration" class="primary">Salvar</button>
+          <button id="dismiss-duration" class="ghost-btn">Agora não</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="login-view" class="view" hidden>
     <img src="../icons/128.png" width="56" height="56" alt="">
     <p id="login-text">Entre com a conta do Gmail que o OTPeek deve acompanhar.</p>
@@ -73,6 +92,12 @@
           <span>Entrar com outra conta</span>
         </button>
         <p id="accounts-error" class="error" hidden></p>
+      </div>
+    </div>
+    <div class="card" id="site-logins-card" hidden>
+      <div class="setting col">
+        <div class="label line"><strong>Contas nos sites</strong><button id="clear-logins" class="ghost-btn">Limpar</button></div>
+        <ul id="site-logins" class="site-logins"></ul>
       </div>
     </div>
   </section>
@@ -120,6 +145,13 @@
       <div class="setting">
         <div class="label"><strong>Links</strong><small>Confirmar e-mail, entrar, redefinir senha</small></div>
         <label class="switch"><input type="checkbox" id="kind-links" aria-label="Links"><span></span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="setting">
+        <div class="label"><strong>Identificar logins nos sites</strong><small>Lê só o campo de e-mail do login, nunca a senha. Pede acesso a todos os sites e vale para páginas abertas depois de ligar.</small></div>
+        <label class="switch"><input type="checkbox" id="browser-enabled" aria-label="Identificar logins nos sites"><span></span></label>
       </div>
     </div>
 

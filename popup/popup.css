@@ -415,3 +415,9 @@ button.forget:hover { background: var(--line); color: var(--danger); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .subject.failed { color: var(--danger); }
+
+.site-logins { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.site-login { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.site-login .email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-login .email.struck { text-decoration: line-through; opacity: .6; }
+#duration-select { width: 100%; padding: 6px; }

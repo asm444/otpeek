@@ -62,6 +62,16 @@ Atualizar a extensão não apaga nada. Removê-la apaga, então guarde a configu
 
 Ao carregar a extensão de novo, o client ID, as contas e as opções voltam sozinhos. O arquivo tem o client ID e os seus e-mails, nunca o acesso ao Gmail, e o Git o ignora. Salve de novo depois de mudar algo: o arquivo não se atualiza sozinho. Se você apagar a pasta, copie o arquivo antes.
 
+### Identificar logins nos sites (opcional)
+
+Os códigos e links do Gmail chegam sem isto. Em **Opções**, ligue **Identificar logins nos sites** e aceite o acesso a todos os sites. Com isso:
+
+- O OTPeek lê só o campo de e-mail do formulário de login, nunca a senha, e guarda qual e-mail você usa em cada site.
+- Quando um código chega em até 5 minutos depois do login, o popup abre sozinho. O código é procurado em todas as caixas conectadas, o que cobre e-mails encaminhados.
+- Se você entrar no mesmo site com outro e-mail, o anterior fica riscado no fim da lista **Contas nos sites**, durante o tempo que você escolher para aquele site. Depois, o risco sai.
+
+A lista fica só neste Chrome e não vai para o arquivo de configuração, que guarda apenas a duração de cada site. Logins dentro de iframes não são identificados.
+
 ### Problemas comuns
 
 - **"Erro 400: redirect_uri_mismatch"**: o endereço de redirecionamento no Google Cloud difere do que o popup mostra. Copie de novo pelo botão **Copiar** do popup.
@@ -131,6 +141,16 @@ Updating the extension erases nothing. Removing it does, so keep the configurati
 2. Save `otpeek.config.json` in the `otpeek` folder.
 
 When you load the extension again, the client ID, accounts and options come back on their own. The file holds the client ID and your email addresses, never Gmail access, and Git ignores it. Save again after changing something: the file does not update itself. If you delete the folder, copy the file first.
+
+### Identify logins on sites (optional)
+
+Gmail codes and links arrive without this. In **Opções** (Options), turn on **Identificar logins nos sites** and accept access to all sites. Then:
+
+- OTPeek reads only the email field of the login form, never the password, and keeps which email you use on each site.
+- When a code arrives within 5 minutes of the login, the popup opens by itself. It searches every connected mailbox, which covers forwarded email.
+- If you sign in to the same site with another email, the previous one is struck through at the end of the **Contas nos sites** list for the time you pick for that site. Then the strike goes away.
+
+The list stays in this Chrome and does not go to the configuration file, which keeps only each site's duration. Logins inside iframes are not identified.
 
 ### Common problems
 

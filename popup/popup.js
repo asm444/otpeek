@@ -10,7 +10,10 @@ const DEFAULTS = {
   scope: 'recent',
   maxResults: 20,
   kinds: { codes: true, links: true },
+  browserEnabled: false,
 };
+
+const SITE_ORIGINS = ['http://*/*', 'https://*/*'];
 
 const STATUS_TEXT = {
   ok: 'Monitorando',
@@ -155,6 +158,30 @@ function renderAccounts() {
   }));
 }
 
+function formatRemaining(ms) {
+  const hours = Math.ceil(ms / 3_600_000);
+  return hours < 24 ? `${hours} h` : `${Math.ceil(hours / 24)} d`;
+}
+
+async function renderSiteLogins() {
+  const { logins } = await chrome.storage.local.get('logins');
+  const accounts = logins?.accounts ?? [];
+  $('site-logins-card').hidden = accounts.length === 0;
+  const now = Date.now();
+  $('site-logins').replaceChildren(...accounts.map(a => {
+    const struck = a.struck && (a.until === null || a.until > now);
+    const li = document.createElement('li');
+    li.className = 'site-login';
+    const email = document.createElement('span');
+    email.className = struck ? 'email struck' : 'email';
+    email.textContent = a.email;
+    const info = document.createElement('small');
+    info.textContent = struck && a.until ? `${a.host} · ${formatRemaining(a.until - now)}` : a.host;
+    li.append(email, info);
+    return li;
+  }));
+}
+
 function setRange(id, value) {
   const input = $(id);
   input.value = value;
@@ -168,7 +195,8 @@ function paintRange(input) {
   $(`${input.id}-out`).textContent = `${input.value}${unit}`;
 }
 
-function pickView(status) {
+function pickView(status, askDuration) {
+  if (askDuration) return 'duration';
   if (!settings.clientId) return 'setup';
   if (view !== 'list') return view;
   if (!settings.accountEmail || status === 'reauth') return 'login';
@@ -176,13 +204,13 @@ function pickView(status) {
 }
 
 async function render() {
-  const st = await chrome.storage.session.get(['results', 'status', 'error', 'email', 'justConnected']);
+  const st = await chrome.storage.session.get(['results', 'status', 'error', 'email', 'justConnected', 'askDuration']);
   const results = st.results || [];
   const status = st.status || 'idle';
   for (const r of results) if (r.isNew) highlight.add(r.id);
 
-  const active = pickView(status);
-  for (const name of ['setup', 'login', 'accounts', 'list', 'settings']) $(`${name}-view`).hidden = active !== name;
+  const active = pickView(status, st.askDuration);
+  for (const name of ['duration', 'setup', 'login', 'accounts', 'list', 'settings']) $(`${name}-view`).hidden = active !== name;
   $('toggle-settings').setAttribute('aria-expanded', String(active === 'settings'));
   $('toggle-settings').title = active === 'settings' ? 'Voltar' : 'Opções';
   $('account-pill').setAttribute('aria-expanded', String(active === 'accounts'));
@@ -208,7 +236,12 @@ async function render() {
   $('connected').hidden = !connectedBanner || status !== 'ok';
   $('connected-email').textContent = connectedBanner || '';
 
-  if (active === 'accounts') renderAccounts();
+  if (active === 'accounts') {
+    renderAccounts();
+    await renderSiteLogins();
+  }
+  $('duration-host').textContent = st.askDuration?.host;
+  $('browser-enabled').checked = settings.browserEnabled;
 
   $('account-label').textContent = email || 'Nenhuma conta conectada';
   $('client-id-label').textContent = settings.clientId ? `${settings.clientId.slice(0, 18)}…` : '';
@@ -262,6 +295,17 @@ function bindControls() {
     await saveSettings({ clientId: '' });
   });
 
+  $('browser-enabled').addEventListener('change', async e => {
+    if (e.target.checked) e.target.checked = await chrome.permissions.request({ origins: SITE_ORIGINS });
+    await send({ type: 'setBrowserEnabled', enabled: e.target.checked });
+  });
+  $('save-duration').addEventListener('click', async () => {
+    const { askDuration } = await chrome.storage.session.get('askDuration');
+    await send({ type: 'setDuration', host: askDuration.host, durationMs: Number($('duration-select').value) });
+  });
+  $('dismiss-duration').addEventListener('click', () => send({ type: 'dismissDuration' }));
+  $('clear-logins').addEventListener('click', () => send({ type: 'clearLogins' }));
+
   $('save-config').addEventListener('click', async () => {
     const r = await send({ type: 'saveConfig' });
     showMessage('error', r?.ok ? '' : 'O arquivo não foi salvo.');
@@ -291,7 +335,7 @@ $('refresh').addEventListener('click', () => {
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area === 'local' && changes.settings) await loadSettings();
-  if (area === 'local' || changes.results || changes.status || changes.email || changes.justConnected) render();
+  if (area === 'local' || changes.results || changes.status || changes.email || changes.justConnected || changes.askDuration) render();
 });
 
 bindControls();
