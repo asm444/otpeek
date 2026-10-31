@@ -8,6 +8,9 @@ const listeners = { message: [] };
 const downloads = [];
 const perms = { granted: false, added: [], removed: [] };
 const scripts = [];
+const injected = [];
+const tabsWithField = new Set();
+let activeTab = { id: 9, url: 'https://ativo.example/entrar' };
 let popupsOpened = 0;
 let popupRefused = false;
 const popupWindows = [];
@@ -50,7 +53,12 @@ globalThis.chrome = {
     getRegisteredContentScripts: async () => scripts.slice(),
     registerContentScripts: async list => { scripts.push(...list); },
     unregisterContentScripts: async () => { scripts.length = 0; },
+    executeScript: async ({ target, files, args }) => {
+      injected.push({ tabId: target.tabId, files, args });
+      return [{ result: files ? undefined : { filled: tabsWithField.has(target.tabId), submitted: false } }];
+    },
   },
+  tabs: { query: async () => [activeTab] },
   windows: { getLastFocused: async () => ({ id: 7 }), update: async (id, opts) => { windowFocus.push([id, opts.focused]); } },
   action: { openPopup: async (opts = {}) => { if (popupRefused && !opts.windowId) throw new Error('Could not find an active browser window.'); if (opts.windowId) popupWindows.push(opts.windowId); popupsOpened++; }, setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
 };
@@ -314,6 +322,36 @@ async function codeOpensPopup() {
   eq('só link, sem código, não abre o popup', popupsOpened, abertos);
 }
 
+async function codeFill() {
+  let n = 0;
+  const arrive = async code => {
+    n++;
+    responses.set('GET /history', { body: { historyId: `21${n}`, history: [{ messagesAdded: [{ message: { id: `fill${n}` } }] }] } });
+    responses.set('GET /messages/fill' + n, { body: message({ id: `fill${n}`, subject: 'Código', text: `Seu código: ${code}`, date: Date.now() }) });
+    injected.length = 0;
+    await bg.tick();
+    return injected.filter(i => i.args).map(i => [i.tabId, i.args[0]]);
+  };
+  await send({ type: 'loginDetected', email: 'g@y.com' }, { tab: { url: 'https://login.example/entrar', id: 41 } });
+  tabsWithField.add(41);
+  eq('código cola na aba onde o login foi identificado', await arrive('481516'), [[41, '481516']]);
+  eq('a aba recebe o script de preenchimento', injected[0], { tabId: 41, files: ['src/code-fill.js'], args: undefined });
+
+  await send({ type: 'loginDetected', email: 'h@y.com' }, { tab: { url: 'https://login.example/entrar', id: 42 } });
+  tabsWithField.add(9);
+  eq('sem campo na aba do login, tenta a aba visível', await arrive('234234'), [[42, '234234'], [9, '234234']]);
+  eq('sem login recente, cola na aba visível que tem o campo', await arrive('909090'), [[9, '909090']]);
+
+  store.local.settings = { ...settings(), blockedSites: ['ativo.example'] };
+  eq('site bloqueado não recebe o código', await arrive('111222'), []);
+  store.local.settings = { ...settings(), blockedSites: [], fillCode: false };
+  eq('interruptor desligado não cola', await arrive('333444'), []);
+  store.local.settings = { ...settings(), fillCode: true, browserEnabled: false };
+  eq('sem identificar logins não cola', await arrive('555666'), []);
+  store.local.settings = { ...settings(), browserEnabled: true };
+  eq('opção de colar vai para o arquivo de configuração', JSON.parse(serializeConfig(settings())).fillCode, true);
+}
+
 async function otherBoxes() {
   const s = settings();
   store.local.settings = { ...s, accounts: ['b@gmail.com', 'c@gmail.com'], accountEmail: 'b@gmail.com' };
@@ -467,4 +505,4 @@ async function browserOff() {
   eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, blocking, identity, fastPolling, updates, browserToggle, browserOff]);
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, codeFill, otherBoxes, popupFallback, blocking, identity, fastPolling, updates, browserToggle, browserOff]);

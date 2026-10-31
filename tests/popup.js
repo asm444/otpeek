@@ -25,6 +25,7 @@ let grant = true;
 const changed = [];
 const area = name => ({
   get: async keys => Object.fromEntries((typeof keys === 'string' ? [keys] : keys).filter(k => k in store[name]).map(k => [k, structuredClone(store[name][k])])),
+  set: async obj => Object.assign(store[name], structuredClone(obj)),
 });
 
 globalThis.chrome = {
@@ -205,6 +206,21 @@ async function links() {
   await update('session', { results: {} });
 }
 
+async function fillSwitch() {
+  store.local.settings.browserEnabled = false;
+  await update('local', { settings: {} });
+  eq('colar na página vem ligado e travado sem identificar logins', [$('fill-code').checked, $('fill-code').disabled], [true, true]);
+  store.local.settings.browserEnabled = true;
+  await update('local', { settings: {} });
+  eq('com identificar logins o interruptor libera', $('fill-code').disabled, false);
+  $('fill-code').checked = false;
+  $('fill-code').dispatchEvent(new Event('change'));
+  await settle();
+  eq('desligar colar na página salva a opção', store.local.settings.fillCode, false);
+  store.local.settings.browserEnabled = false;
+  await update('local', { settings: {} });
+}
+
 async function footer() {
   eq('rodapé mostra a versão instalada', $('current-version').textContent, '0.9.0');
   eq('sem verificação pede para recarregar', [$('update-status').textContent, $('update-available').hidden], ['Recarregue para buscar atualizações', true]);
@@ -220,4 +236,4 @@ async function footer() {
   eq('botão recarrega a extensão', reloads, 1);
 }
 
-await run([duration, siteLogins, browserSwitch, receivedCode, links, footer]);
+await run([duration, siteLogins, browserSwitch, receivedCode, links, fillSwitch, footer]);

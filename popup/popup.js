@@ -13,6 +13,7 @@ const DEFAULTS = {
   maxResults: 20,
   kinds: { codes: true, links: true },
   browserEnabled: false,
+  fillCode: true,
   siteDurations: {},
   customDurations: [],
   blockedSites: [],
@@ -384,6 +385,8 @@ async function render() {
   $('identity-toggle').hidden = !settings.browserEnabled;
   $('identity-toggle').setAttribute('aria-expanded', String(active === 'identity'));
   $('browser-enabled').checked = settings.browserEnabled;
+  $('fill-code').checked = settings.fillCode;
+  $('fill-code').disabled = !settings.browserEnabled;
 
   $('account-label').textContent = email || 'Nenhuma conta conectada';
   $('client-id-label').textContent = settings.clientId ? `${settings.clientId.slice(0, 18)}…` : '';
@@ -412,6 +415,7 @@ function bindControls() {
     $(id).addEventListener('change', e => saveSettings({ [id]: Number(e.target.value) }));
   }
   $('enabled').addEventListener('change', e => saveSettings({ enabled: e.target.checked }));
+  $('fill-code').addEventListener('change', e => saveSettings({ fillCode: e.target.checked }));
   const kinds = () => ({ codes: $('kind-codes').checked, links: $('kind-links').checked });
   $('kind-codes').addEventListener('change', () => saveSettings({ kinds: kinds() }));
   $('kind-links').addEventListener('change', () => saveSettings({ kinds: kinds() }));

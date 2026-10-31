@@ -17,6 +17,7 @@ export const DEFAULTS = {
   maxResults: 20,
   kinds: { codes: true, links: true },
   browserEnabled: false,
+  fillCode: true,
   siteDurations: {},
   customDurations: [],
   blockedSites: [],
@@ -142,6 +143,23 @@ async function openPopup() {
   }
 }
 
+async function fillOnPage(s, code, pending) {
+  if (!s.browserEnabled || !s.fillCode) return;
+  const tabIds = pending?.tabId ? [pending.tabId] : [];
+  try {
+    const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (active?.id && !tabIds.includes(active.id) && !s.blockedSites.includes(hostOf(active.url))) tabIds.push(active.id);
+  } catch {}
+  for (const tabId of tabIds) {
+    try {
+      const target = { tabId };
+      await chrome.scripting.executeScript({ target, files: ['src/code-fill.js'] });
+      const [{ result } = {}] = await chrome.scripting.executeScript({ target, func: value => globalThis.otpeekFillCode(document, value), args: [code] });
+      if (result?.filled) return;
+    } catch {}
+  }
+}
+
 async function scanOtherBoxes(s, pending, seen) {
   const found = [];
   const after = Math.floor((pending.at - CLOCK_SKEW_MS) / 1000);
@@ -193,8 +211,10 @@ async function runTick() {
     }
     const pending = Date.now() - st.pendingLogin?.at <= LOGIN_WINDOW_MS ? st.pendingLogin : null;
     if (pending) found.push(...await scanOtherBoxes(s, pending, seen));
-    const codeArrived = pending && found.some(r => r.date >= pending.at - CLOCK_SKEW_MS && r.items.some(i => i.kind === 'code'));
-    const newCode = st.historyId ? found.filter(r => r.items.some(i => i.kind === 'code')).sort((a, b) => b.date - a.date)[0] : null;
+    const hasCode = r => r.items.some(i => i.kind === 'code');
+    const codeArrived = pending && found.some(r => r.date >= pending.at - CLOCK_SKEW_MS && hasCode(r));
+    const latestCode = found.filter(hasCode).sort((a, b) => b.date - a.date)[0];
+    const newCode = st.historyId ? latestCode : null;
     const results = mergeResults(st.results, found, s.maxResults);
     const patch = { results, seen: [...seen].slice(-SEEN_CAP), historyId, email: s.accountEmail, lastRun: Date.now(), status: 'ok', error: null };
     if (st.email !== s.accountEmail) patch.justConnected = s.accountEmail;
@@ -202,7 +222,10 @@ async function runTick() {
     if (newCode) Object.assign(patch, { fastUntil: 0, autoShow: { id: newCode.id, at: Date.now() } });
     await setState(patch);
     await updateBadge(results);
-    if (codeArrived || newCode) await openPopup();
+    if (codeArrived || newCode) {
+      await fillOnPage(s, latestCode.items.find(i => i.kind === 'code').value, pending);
+      await openPopup();
+    }
   } catch (e) {
     if (e instanceof AuthError) return setState({ status: 'reauth', error: e.message, lastRun: Date.now() });
     // historyId expirado (o Gmail guarda cerca de uma semana): zera e o proximo tick refaz a varredura.
@@ -368,7 +391,7 @@ async function loginDetected({ email }, sender) {
   const now = Date.now();
   const { state, switched, needsDuration } = recordLogin(expireReminders(await getLogins(), now), { host, email }, s.siteDurations[host], now);
   await saveLogins(state);
-  await setState({ pendingLogin: { at: now }, ...(needsDuration ? { askDuration: { host } } : {}) });
+  await setState({ pendingLogin: { at: now, tabId: sender.tab?.id ?? null }, ...(needsDuration ? { askDuration: { host } } : {}) });
   if (switched) await speedUp();
   if (needsDuration) await openPopup();
   return { ok: true };

@@ -3,6 +3,7 @@ import { decodeEntities, extract, findCode, htmlToText } from '../src/extract.js
 import { b64url, latin1, message } from './fixtures.js';
 import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from '../src/logins.js';
 import '../src/login-detect.js';
+import '../src/code-fill.js';
 import { isNewer, parseRelease } from '../src/version.js';
 import { parseMessage, senderName, decodeEncodedWords } from '../src/mime.js';
 
@@ -233,6 +234,34 @@ async function loginForms() {
   eq('hidden é ignorado', detect('<input type="hidden" name="email" data-v="a@x.com"><input type="password">'), null);
 }
 
+async function codeFields() {
+  const page = html => {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    document.body.append(box);
+    const events = [];
+    box.addEventListener('input', e => events.push(e.target.name || e.target.id));
+    let clicked = 0;
+    box.querySelector('[data-submit]')?.addEventListener('click', e => { e.preventDefault(); clicked++; });
+    const result = otpeekFillCode(box, '482913');
+    const values = [...box.querySelectorAll('input')].map(i => i.value);
+    box.remove();
+    return { result, values, events, clicked };
+  };
+  eq('autocomplete one-time-code recebe o código', page('<input name="q"><input autocomplete="one-time-code" name="c">').values, ['', '482913']);
+  eq('campo chamado código recebe e avisa a página', [page('<label>Código de verificação <input id="v"></label>').values, page('<input name="otp">').events], [['482913'], ['otp']]);
+  eq('dígitos separados recebem um caractere cada', page('<div>' + '<input maxlength="1">'.repeat(6) + '</div>').values, ['4', '8', '2', '9', '1', '3']);
+  eq('sem campo de código não preenche nada', page('<input name="busca" placeholder="Buscar"><input name="email">'), { result: { filled: false, submitted: false }, values: ['', ''], events: [], clicked: 0 });
+  eq('cupom e senha não são campo de código', page('<input name="coupon_code"><input type="password" name="pin">').result.filled, false);
+  eq('campo escondido ou desabilitado é ignorado', page('<input name="otp" style="display:none"><input name="code" disabled>').result.filled, false);
+  const comBotao = page('<form><input name="otp"><button data-submit>Verificar</button></form>');
+  eq('com um único botão de confirmar, envia', [comBotao.result, comBotao.clicked], [{ filled: true, submitted: true }, 1]);
+  const ambiguo = page('<form><input name="otp"><button data-submit>Verificar</button><button>Outro</button></form>');
+  eq('dois botões de envio: só cola', [ambiguo.result, ambiguo.clicked], [{ filled: true, submitted: false }, 0]);
+  eq('botão de reenviar não é acionado', page('<form><input name="otp"><button data-submit>Reenviar código</button></form>').clicked, 0);
+  eq('sem formulário: só cola', page('<input name="otp">').result, { filled: true, submitted: false });
+}
+
 async function versions() {
   eq('versão maior é nova', isNewer('v0.10.0', '0.9.0'), true);
   eq('mesma versão não é nova', isNewer('v0.9.0', '0.9.0'), false);
@@ -243,4 +272,4 @@ async function versions() {
   eq('resposta sem tag é recusada', parseRelease({ message: 'Not Found' }), null);
 }
 
-await run([versions, codes, links, mime, fishAudio, predictus, formatos, logins, loginForms]);
+await run([versions, codes, links, mime, fishAudio, predictus, formatos, logins, loginForms, codeFields]);
