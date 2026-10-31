@@ -194,6 +194,17 @@ async function receivedCode() {
   eq('aviso antigo não reabre nem fecha', [$('auto-code-value').textContent, closed], ['777111', 0]);
 }
 
+async function links() {
+  store.session.results = [{ id: 'l1', from: 'Loja', subject: 'Confirme', date: Date.now(), isNew: false, items: [{ kind: 'link', value: 'https://loja.example/confirmar?t=1' }, { kind: 'code', value: '123456' }] }];
+  await update('session', { results: {} });
+  const rows = [...$('list').querySelectorAll('.value')];
+  const abrir = rows[0].querySelector('a.open');
+  eq('link oferece copiar e abrir em nova aba', [rows[0].querySelector('.copy').textContent, abrir?.textContent, abrir?.href, abrir?.target], ['Copiar', 'Abrir', 'https://loja.example/confirmar?t=1', '_blank']);
+  eq('código não ganha botão de abrir', rows[1].querySelector('a.open'), null);
+  store.session.results = [];
+  await update('session', { results: {} });
+}
+
 async function footer() {
   eq('rodapé mostra a versão instalada', $('current-version').textContent, '0.9.0');
   eq('sem verificação pede para recarregar', [$('update-status').textContent, $('update-available').hidden], ['Recarregue para buscar atualizações', true]);
@@ -209,4 +220,4 @@ async function footer() {
   eq('botão recarrega a extensão', reloads, 1);
 }
 
-await run([duration, siteLogins, browserSwitch, receivedCode, footer]);
+await run([duration, siteLogins, browserSwitch, receivedCode, links, footer]);

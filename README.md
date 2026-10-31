@@ -9,6 +9,7 @@
 O OTPeek mostra num popup os códigos de verificação e os links de confirmação que chegam no seu Gmail. Você copia com um clique, sem abrir o Gmail.
 
 - Lê o e-mail inteiro, inclusive os já lidos.
+- Cada link tem **Copiar** e **Abrir**, que abre o link numa aba nova.
 - **Excluir** manda o e-mail para a lixeira do Gmail.
 - Acompanha a conta que você escolher, e você troca de conta pelo e-mail no topo do popup.
 - Processa tudo no seu navegador. O acesso fica só na memória do Chrome e some quando você fecha o navegador.
@@ -99,6 +100,7 @@ A lista fica só neste Chrome e não vai para o arquivo de configuração, que g
 OTPeek shows, in a popup, the verification codes and confirmation links that reach your Gmail. One click copies them, with Gmail closed.
 
 - Reads the whole email, including read ones.
+- Every link has **Copiar** (Copy) and **Abrir** (Open), which opens it in a new tab.
 - **Excluir** (Delete) moves the email to the Gmail trash.
 - Watches the account you pick, and you switch accounts through the email at the top of the popup.
 - Processes everything in your browser. Access lives only in Chrome's memory and goes away when you close the browser.

@@ -117,6 +117,9 @@ function renderItem(result) {
     btn.addEventListener('click', () => copy(row, btn, item.value));
     code.addEventListener('click', () => copy(row, btn, item.value));
     row.append(code, btn);
+    if (item.kind === 'link') {
+      row.append(Object.assign(document.createElement('a'), { className: 'open', href: item.value, target: '_blank', rel: 'noopener noreferrer', textContent: 'Abrir' }));
+    }
     li.querySelector('.values').append(row);
   }
   li.querySelector('.remove').addEventListener('click', () => trashWithAnimation(li, result.id));

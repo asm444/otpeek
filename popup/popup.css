@@ -179,6 +179,21 @@ button.copy {
 button.copy:hover { filter: brightness(1.08); }
 button.copy:active { transform: scale(.94); }
 button.copy.copied { background: var(--ok); animation: pop .35s var(--spring); }
+a.open {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  transition: filter .15s;
+}
+a.open:hover { filter: brightness(.96); }
+.value.link button.copy { min-width: 0; }
 
 .connected {
   display: flex;
