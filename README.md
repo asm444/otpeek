@@ -94,6 +94,7 @@ A lista fica só neste Chrome e não vai para o arquivo de configuração, que g
 
 `bash tests/run.sh` roda as suítes no Chrome sem janela. Precisa de `google-chrome` e `python3`.
 
+[Gostou? Um cafezinho é sempre uma ótima motivação!](https://buymeacoffee.com/asm444/support-otpeek-development)
 ---
 
 ## English
@@ -185,3 +186,5 @@ The list stays in this Chrome and does not go to the configuration file, which k
 ### Tests
 
 `bash tests/run.sh` runs the suites in headless Chrome. It needs `google-chrome` and `python3`.
+
+[Like? A coffee is always a great motivation!](https://buymeacoffee.com/asm444/support-otpeek-development)
