@@ -416,6 +416,17 @@ async function fastPolling() {
   eq('popup limpa o código mostrado', (await bg.getState()).autoShow, null);
 }
 
+async function updates() {
+  responses.set('GET /repos/asm444/otpeek/releases/latest', { body: { tag_name: 'v9.0.0', html_url: 'https://github.com/asm444/otpeek/releases/tag/v9.0.0' } });
+  responses.set('GET /history', { body: { historyId: '500' } });
+  const antes = count('GET /history');
+  eq('recarregar responde ok', await dispatch({ type: 'refresh' }), { ok: true });
+  eq('recarregar verifica e-mails e a versão', [count('GET /history') > antes, store.local.latestRelease?.version], [true, '9.0.0']);
+  responses.set('GET /repos/asm444/otpeek/releases/latest', { status: 500, body: {} });
+  await bg.checkUpdate();
+  eq('falha no GitHub mantém a última versão conhecida', store.local.latestRelease.version, '9.0.0');
+}
+
 async function browserToggle() {
   await dispatch({ type: 'setBrowserEnabled', enabled: false });
   eq('desligar para o script e mantém a permissão', [settings().browserEnabled, scripts.length, perms.granted], [false, 0, true]);
@@ -432,4 +443,4 @@ async function browserOff() {
   eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, identity, fastPolling, browserToggle, browserOff]);
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, identity, fastPolling, updates, browserToggle, browserOff]);

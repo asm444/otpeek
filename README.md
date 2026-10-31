@@ -57,6 +57,10 @@ O popup mostra "Conectado a voce@gmail.com" e o ícone mostra **OK** em verde. A
 
 Quando chega um código novo, o popup abre sozinho e mostra o código em destaque, a caixa que o recebeu e a mensagem. Ele fecha em 15 segundos, a menos que você mexa nele. Se o Chrome não tiver janela ativa, o código abre numa janela pequena.
 
+### Atualizar
+
+O botão de recarregar, no topo do popup, também consulta a última release no GitHub. Se houver versão nova, o rodapé mostra o número e o comando `git pull` para copiar. Rode-o na pasta `otpeek` e clique em **Recarregar** no OTPeek em `chrome://extensions`. A extensão não roda o `git pull` sozinha, porque o Chrome não dá a ela acesso ao terminal nem à própria pasta. O rodapé também traz o link para apoiar o desenvolvimento.
+
 ### Guardar a configuração
 
 Atualizar a extensão não apaga nada. Removê-la apaga, então guarde a configuração num arquivo:
@@ -141,6 +145,10 @@ The popup shows "Conectado a you@gmail.com" (Connected) and the icon shows a gre
 ### New code
 
 When a new code arrives, the popup opens by itself and shows the code, the mailbox that received it and the message. It closes after 15 seconds unless you interact with it. If Chrome has no active window, the code opens in a small window.
+
+### Update
+
+The reload button at the top of the popup also checks the latest GitHub release. When a new version exists, the footer shows its number and the `git pull` command to copy. Run it in the `otpeek` folder and click **Reload** on OTPeek in `chrome://extensions`. The extension does not run `git pull` itself, because Chrome gives it no access to the terminal or to its own folder. The footer also links to support the project.
 
 ### Keep your configuration
 

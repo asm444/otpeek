@@ -3,6 +3,7 @@ import { decodeEntities, extract, findCode, htmlToText } from '../src/extract.js
 import { b64url, latin1, message } from './fixtures.js';
 import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from '../src/logins.js';
 import '../src/login-detect.js';
+import { isNewer, parseRelease } from '../src/version.js';
 import { parseMessage, senderName, decodeEncodedWords } from '../src/mime.js';
 
 const msg = ({ subject = '', text = '', html = '' }) => ({ subject, text, html });
@@ -227,4 +228,14 @@ async function loginForms() {
   eq('hidden é ignorado', detect('<input type="hidden" name="email" data-v="a@x.com"><input type="password">'), null);
 }
 
-await run([codes, links, mime, fishAudio, predictus, formatos, logins, loginForms]);
+async function versions() {
+  eq('versão maior é nova', isNewer('v0.10.0', '0.9.0'), true);
+  eq('mesma versão não é nova', isNewer('v0.9.0', '0.9.0'), false);
+  eq('versão menor não é nova', isNewer('0.8.5', '0.9.0'), false);
+  eq('tag inválida não é nova', isNewer('latest', '0.9.0'), false);
+  eq('release válida', parseRelease({ tag_name: 'v1.2.3', html_url: 'https://github.com/asm444/otpeek/releases/tag/v1.2.3' }), { version: '1.2.3', url: 'https://github.com/asm444/otpeek/releases/tag/v1.2.3' });
+  eq('link fora do repositório é recusado', parseRelease({ tag_name: 'v1.2.3', html_url: 'https://evil.example/x' }), null);
+  eq('resposta sem tag é recusada', parseRelease({ message: 'Not Found' }), null);
+}
+
+await run([versions, codes, links, mime, fishAudio, predictus, formatos, logins, loginForms]);

@@ -3,6 +3,7 @@ import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
 import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from './src/logins.js';
+import { RELEASES_API, parseRelease } from './src/version.js';
 import { CONFIG_FILE, parseConfig, serializeConfig } from './src/config-file.js';
 
 export const DEFAULTS = {
@@ -399,6 +400,16 @@ async function refreshReminders() {
   if (next !== logins) await saveLogins(next);
 }
 
+export async function checkUpdate() {
+  try {
+    const res = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } });
+    const latest = res.ok ? parseRelease(await res.json()) : null;
+    if (latest) await chrome.storage.local.set({ latestRelease: { ...latest, checkedAt: Date.now() } });
+  } catch {
+    return;
+  }
+}
+
 async function saveConfig() {
   const url = `data:application/json;charset=utf-8,${encodeURIComponent(serializeConfig(await getSettings()))}`;
   await chrome.downloads.download({ url, filename: CONFIG_FILE, saveAs: true, conflictAction: 'overwrite' });
@@ -436,7 +447,7 @@ const handlers = {
   trash,
   markSeen,
   refresh: async () => {
-    await loop();
+    await Promise.all([loop(), checkUpdate()]);
     return { ok: true };
   },
 };

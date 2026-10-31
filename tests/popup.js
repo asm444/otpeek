@@ -31,7 +31,7 @@ globalThis.chrome = {
   storage: { local: area('local'), session: area('session'), onChanged: { addListener: fn => changed.push(fn) } },
   identity: { getRedirectURL: () => 'https://ext.chromiumapp.org/' },
   permissions: { request: async p => { requested.push(p); return grant; } },
-  runtime: { sendMessage: async msg => { sent.push(msg); return { ok: true }; } },
+  runtime: { getManifest: () => ({ version: '0.9.0' }), sendMessage: async msg => { sent.push(msg); return { ok: true }; } },
 };
 let closed = 0;
 window.close = () => { closed++; };
@@ -176,4 +176,16 @@ async function receivedCode() {
   eq('aviso antigo não reabre nem fecha', [$('auto-code-value').textContent, closed], ['777111', 0]);
 }
 
-await run([duration, siteLogins, browserSwitch, receivedCode]);
+async function footer() {
+  eq('rodapé mostra a versão instalada', $('current-version').textContent, '0.9.0');
+  eq('sem verificação pede para recarregar', [$('update-status').textContent, $('update-available').hidden], ['Recarregue para buscar atualizações', true]);
+  eq('link de apoio', document.querySelector('.support').href, 'https://buymeacoffee.com/asm444/support-otpeek-development');
+  store.local.latestRelease = { version: '0.9.0', url: 'https://github.com/asm444/otpeek/releases/tag/v0.9.0' };
+  await update('local', { latestRelease: {} });
+  eq('versão igual diz que é a mais recente', [$('update-status').textContent, $('update-available').hidden], ['Versão mais recente', true]);
+  store.local.latestRelease = { version: '1.0.0', url: 'https://github.com/asm444/otpeek/releases/tag/v1.0.0' };
+  await update('local', { latestRelease: {} });
+  eq('versão nova mostra número, link e comando', [$('update-available').hidden, $('latest-link').textContent, $('latest-link').href, $('update-command').textContent], [false, 'v1.0.0', 'https://github.com/asm444/otpeek/releases/tag/v1.0.0', 'git pull']);
+}
+
+await run([duration, siteLogins, browserSwitch, receivedCode, footer]);

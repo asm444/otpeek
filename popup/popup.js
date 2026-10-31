@@ -1,3 +1,5 @@
+import { isNewer } from '../src/version.js';
+
 const $ = id => document.getElementById(id);
 
 const DEFAULTS = {
@@ -305,12 +307,26 @@ function showReceived(autoShow, results) {
   }, Math.max(0, autoShow.at + AUTO_SHOW_MS - Date.now()));
 }
 
+async function renderVersion() {
+  const current = chrome.runtime.getManifest().version;
+  const { latestRelease } = await chrome.storage.local.get('latestRelease');
+  const newer = latestRelease && isNewer(latestRelease.version, current);
+  $('current-version').textContent = current;
+  $('update-available').hidden = !newer;
+  $('update-status').textContent = !latestRelease ? 'Recarregue para buscar atualizações' : newer ? '' : 'Versão mais recente';
+  if (newer) {
+    $('latest-link').textContent = `v${latestRelease.version}`;
+    $('latest-link').href = latestRelease.url;
+  }
+}
+
 async function render() {
   const st = await chrome.storage.session.get(['results', 'status', 'error', 'email', 'justConnected', 'askDuration', 'autoShow']);
   const results = st.results || [];
   const status = st.status || 'idle';
   for (const r of results) if (r.isNew) highlight.add(r.id);
 
+  await renderVersion();
   if (st.autoShow && st.autoShow.id !== autoShownId && Date.now() < st.autoShow.at + AUTO_SHOW_MS) showReceived(st.autoShow, results);
   const active = pickView(status, st.askDuration);
   for (const name of ['duration', 'identity', 'setup', 'login', 'accounts', 'list', 'settings']) $(`${name}-view`).hidden = active !== name;
@@ -413,6 +429,7 @@ function bindControls() {
     const r = await send({ type: 'setDuration', host: askDuration.host, durationMs, custom });
     showMessage('duration-error', r?.ok ? '' : r?.error);
   });
+  $('copy-update').addEventListener('click', e => copy(e.target.parentElement, e.target, 'git pull'));
   $('dismiss-duration').addEventListener('click', () => send({ type: 'dismissDuration' }));
   $('clear-logins').addEventListener('click', () => send({ type: 'clearLogins' }));
 
