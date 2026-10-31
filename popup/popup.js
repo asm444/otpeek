@@ -17,6 +17,7 @@ const DEFAULTS = {
 
 const BASE_DURATIONS = [12 * 3_600_000, 86_400_000, 3 * 86_400_000, 7 * 86_400_000, 30 * 86_400_000];
 const DEFAULT_DURATION = 86_400_000;
+const AUTO_SHOW_MS = 15_000;
 const SITE_ORIGINS = ['http://*/*', 'https://*/*'];
 
 const STATUS_TEXT = {
@@ -35,6 +36,9 @@ const shown = new Set();
 let settings = { ...DEFAULTS };
 let view = 'list';
 let connectedBanner = null;
+let autoShownId = null;
+let autoCloseTimer = null;
+let touched = false;
 
 const send = msg => chrome.runtime.sendMessage(msg);
 
@@ -283,12 +287,31 @@ function pickView(status, askDuration) {
   return 'list';
 }
 
+function showReceived(autoShow, results) {
+  const result = results.find(r => r.id === autoShow.id);
+  const code = result?.items.find(i => i.kind === 'code');
+  if (!code) return;
+  autoShownId = autoShow.id;
+  view = 'list';
+  touched = false;
+  $('auto-code').hidden = false;
+  $('auto-code-value').textContent = code.value;
+  $('auto-code-meta').textContent = `${result.account ?? settings.accountEmail} · ${result.from} · ${result.subject}`;
+  $('auto-code-copy').onclick = () => copy($('auto-code'), $('auto-code-copy'), code.value);
+  send({ type: 'clearAutoShow' });
+  clearTimeout(autoCloseTimer);
+  autoCloseTimer = setTimeout(() => {
+    if (!touched) window.close();
+  }, Math.max(0, autoShow.at + AUTO_SHOW_MS - Date.now()));
+}
+
 async function render() {
-  const st = await chrome.storage.session.get(['results', 'status', 'error', 'email', 'justConnected', 'askDuration']);
+  const st = await chrome.storage.session.get(['results', 'status', 'error', 'email', 'justConnected', 'askDuration', 'autoShow']);
   const results = st.results || [];
   const status = st.status || 'idle';
   for (const r of results) if (r.isNew) highlight.add(r.id);
 
+  if (st.autoShow && st.autoShow.id !== autoShownId && Date.now() < st.autoShow.at + AUTO_SHOW_MS) showReceived(st.autoShow, results);
   const active = pickView(status, st.askDuration);
   for (const name of ['duration', 'identity', 'setup', 'login', 'accounts', 'list', 'settings']) $(`${name}-view`).hidden = active !== name;
   $('toggle-settings').setAttribute('aria-expanded', String(active === 'settings'));
@@ -427,8 +450,10 @@ $('refresh').addEventListener('click', () => {
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area === 'local' && changes.settings) await loadSettings();
-  if (area === 'local' || changes.results || changes.status || changes.email || changes.justConnected || changes.askDuration) render();
+  if (area === 'local' || changes.results || changes.status || changes.email || changes.justConnected || changes.askDuration || changes.autoShow) render();
 });
+
+for (const type of ['pointerdown', 'keydown', 'wheel']) document.addEventListener(type, () => { touched = true; }, true);
 
 bindControls();
 await loadSettings();

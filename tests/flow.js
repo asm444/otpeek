@@ -295,13 +295,21 @@ async function codeOpensPopup() {
   responses.set('GET /history', { body: { historyId: '203', history: [{ messagesAdded: [{ message: { id: 'p3' } }] }] } });
   responses.set('GET /messages/p3', { body: message({ id: 'p3', subject: 'Código', text: 'Seu código: 778899', date: at + 3000 }) });
   await bg.tick();
-  eq('código sem login recente só entra na lista', [popupsOpened, (await bg.getState()).results.some(r => r.id === 'p3')], [abertos, true]);
+  eq('código sem login recente também abre o popup', [popupsOpened - abertos, (await bg.getState()).results.some(r => r.id === 'p3')], [1, true]);
+  eq('popup recebe o código a mostrar', (await bg.getState()).autoShow?.id, 'p3');
+  abertos = popupsOpened;
 
   store.session.pendingLogin = { at: Date.now() - 6 * 60_000, host: 'outro.example', email: 'd@y.com' };
   responses.set('GET /history', { body: { historyId: '204', history: [{ messagesAdded: [{ message: { id: 'p4' } }] }] } });
   responses.set('GET /messages/p4', { body: message({ id: 'p4', subject: 'Código', text: 'Seu código: 112233', date: Date.now() }) });
   await bg.tick();
-  eq('login de mais de 5 minutos não abre o popup', [popupsOpened, store.session.pendingLogin], [abertos, null]);
+  eq('login vencido é descartado e o código abre o popup', [popupsOpened - abertos, store.session.pendingLogin], [1, null]);
+
+  abertos = popupsOpened;
+  responses.set('GET /history', { body: { historyId: '205', history: [{ messagesAdded: [{ message: { id: 'p5' } }] }] } });
+  responses.set('GET /messages/p5', { body: message({ id: 'p5', subject: 'Confirme', html: '<a href="https://x.example/verify?t=9">Confirmar</a>', date: Date.now() }) });
+  await bg.tick();
+  eq('só link, sem código, não abre o popup', popupsOpened, abertos);
 }
 
 async function otherBoxes() {
@@ -375,6 +383,39 @@ async function identity() {
   eq('tempos personalizados vão para o arquivo', JSON.parse(serializeConfig(settings())).customDurations, [90 * 60_000]);
 }
 
+async function fastPolling() {
+  store.local.settings = { ...settings(), browserEnabled: true, intervalSec: 60 };
+  store.session.fastUntil = 0;
+  eq('sem troca usa o intervalo do usuário', await bg.pollDelaySec(), 60);
+  await send({ type: 'loginDetected', email: 'r1@y.com' }, fromSite('https://rapido.example/login'));
+  eq('primeiro login não acelera', await bg.pollDelaySec(), 60);
+  await send({ type: 'loginDetected', email: 'r2@y.com' }, fromSite('https://rapido.example/login'));
+  eq('riscar na troca acelera para 5 s', await bg.pollDelaySec(), 5);
+  eq('aceleração tem prazo de 15 minutos', Math.round((store.session.fastUntil - Date.now()) / 60_000), 15);
+
+  responses.set('GET /history', { body: { historyId: '400', history: [{ messagesAdded: [{ message: { id: 'f1' } }] }] } });
+  responses.set('GET /messages/f1', { body: message({ id: 'f1', subject: 'Código', text: 'Seu código: 135790', date: Date.now() }) });
+  await bg.tick();
+  eq('código recebido volta ao intervalo do usuário', await bg.pollDelaySec(), 60);
+
+  await dispatch({ type: 'setAccountMark', host: 'rapido.example', email: 'r2@y.com', marked: false });
+  eq('desmarcar não acelera', await bg.pollDelaySec(), 60);
+  await dispatch({ type: 'setAccountMark', host: 'rapido.example', email: 'r2@y.com', marked: true });
+  eq('marcar à mão acelera', await bg.pollDelaySec(), 5);
+  await dispatch({ type: 'setAccountMark', host: 'rapido.example', email: 'ninguem@y.com', marked: true });
+  store.session.fastUntil = Date.now() - 1;
+  eq('aceleração vencida volta ao intervalo do usuário', await bg.pollDelaySec(), 60);
+  await dispatch({ type: 'setAccountMark', host: 'rapido.example', email: 'ninguem@y.com', marked: true });
+  eq('marcar e-mail que não está na lista não acelera', await bg.pollDelaySec(), 60);
+  store.local.settings = { ...settings(), intervalSec: 5 };
+  store.session.fastUntil = Date.now() + 60_000;
+  eq('intervalo do usuário já mínimo continua igual', await bg.pollDelaySec(), 5);
+  store.local.settings = { ...settings(), intervalSec: 600 };
+  store.session.fastUntil = 0;
+  await dispatch({ type: 'clearAutoShow' });
+  eq('popup limpa o código mostrado', (await bg.getState()).autoShow, null);
+}
+
 async function browserToggle() {
   await dispatch({ type: 'setBrowserEnabled', enabled: false });
   eq('desligar para o script e mantém a permissão', [settings().browserEnabled, scripts.length, perms.granted], [false, 0, true]);
@@ -391,4 +432,4 @@ async function browserOff() {
   eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, identity, browserToggle, browserOff]);
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, identity, fastPolling, browserToggle, browserOff]);

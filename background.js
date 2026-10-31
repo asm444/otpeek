@@ -29,6 +29,8 @@ const WATCHDOG = 'watchdog';
 const LOGIN_WINDOW_MS = 5 * 60_000;
 const CLOCK_SKEW_MS = 60_000;
 const SITE_ORIGINS = ['http://*/*', 'https://*/*'];
+const FAST_INTERVAL_SEC = 5;
+const FAST_WINDOW_MS = 15 * 60_000;
 const MAX_DURATION_MS = 366 * 86_400_000;
 const MAX_CUSTOM_DURATIONS = 20;
 const LOGIN_WATCH = 'login-watch';
@@ -43,13 +45,13 @@ async function saveSettings(patch) {
   await chrome.storage.local.set({ settings: { ...(await getSettings()), ...patch } });
 }
 
-const STATE_KEYS = ['results', 'seen', 'historyId', 'lastRun', 'status', 'error', 'email', 'justConnected', 'tokens', 'pendingLogin', 'askDuration'];
+const STATE_KEYS = ['results', 'seen', 'historyId', 'lastRun', 'status', 'error', 'email', 'justConnected', 'tokens', 'pendingLogin', 'askDuration', 'fastUntil', 'autoShow'];
 
 export async function getState() {
   const s = await chrome.storage.session.get(STATE_KEYS);
   return {
     results: [], seen: [], historyId: null, lastRun: 0, status: 'idle', error: null,
-    email: null, justConnected: null, tokens: {}, pendingLogin: null, askDuration: null, ...s,
+    email: null, justConnected: null, tokens: {}, pendingLogin: null, askDuration: null, fastUntil: 0, autoShow: null, ...s,
   };
 }
 
@@ -184,13 +186,15 @@ async function runTick() {
     const pending = Date.now() - st.pendingLogin?.at <= LOGIN_WINDOW_MS ? st.pendingLogin : null;
     if (pending) found.push(...await scanOtherBoxes(s, pending, seen));
     const codeArrived = pending && found.some(r => r.date >= pending.at - CLOCK_SKEW_MS && r.items.some(i => i.kind === 'code'));
+    const newCode = st.historyId ? found.filter(r => r.items.some(i => i.kind === 'code')).sort((a, b) => b.date - a.date)[0] : null;
     const results = mergeResults(st.results, found, s.maxResults);
     const patch = { results, seen: [...seen].slice(-SEEN_CAP), historyId, email: s.accountEmail, lastRun: Date.now(), status: 'ok', error: null };
     if (st.email !== s.accountEmail) patch.justConnected = s.accountEmail;
     if (codeArrived || !pending) patch.pendingLogin = null;
+    if (newCode) Object.assign(patch, { fastUntil: 0, autoShow: { id: newCode.id, at: Date.now() } });
     await setState(patch);
     await updateBadge(results);
-    if (codeArrived) await openPopup();
+    if (codeArrived || newCode) await openPopup();
   } catch (e) {
     if (e instanceof AuthError) return setState({ status: 'reauth', error: e.message, lastRun: Date.now() });
     // historyId expirado (o Gmail guarda cerca de uma semana): zera e o proximo tick refaz a varredura.
@@ -214,12 +218,25 @@ let timer = null;
 
 const shouldPoll = s => s.clientId && s.accountEmail && s.enabled;
 
+export async function pollDelaySec() {
+  const s = await getSettings();
+  const { fastUntil } = await getState();
+  return fastUntil > Date.now() ? FAST_INTERVAL_SEC : s.intervalSec;
+}
+
+async function speedUp() {
+  await setState({ fastUntil: Date.now() + FAST_WINDOW_MS });
+  if (!timer || running) return;
+  clearTimeout(timer);
+  timer = setTimeout(loop, FAST_INTERVAL_SEC * 1000);
+}
+
 async function loop() {
   clearTimeout(timer);
   timer = null;
   await tick();
   const s = await getSettings();
-  if (shouldPoll(s)) timer = setTimeout(loop, s.intervalSec * 1000);
+  if (shouldPoll(s)) timer = setTimeout(loop, (await pollDelaySec()) * 1000);
 }
 
 async function resume() {
@@ -227,7 +244,7 @@ async function resume() {
   const s = await getSettings();
   if (!shouldPoll(s)) return;
   const { lastRun } = await getState();
-  timer = setTimeout(loop, Math.max(0, lastRun + s.intervalSec * 1000 - Date.now()));
+  timer = setTimeout(loop, Math.max(0, lastRun + (await pollDelaySec()) * 1000 - Date.now()));
 }
 
 async function ensureWatchdog() {
@@ -341,9 +358,10 @@ async function loginDetected({ email }, sender) {
   const host = hostOf(sender.tab?.url);
   if (!s.browserEnabled || !host || !isValidEmail(email)) return { ok: false };
   const now = Date.now();
-  const { state, needsDuration } = recordLogin(expireReminders(await getLogins(), now), { host, email }, s.siteDurations[host], now);
+  const { state, switched, needsDuration } = recordLogin(expireReminders(await getLogins(), now), { host, email }, s.siteDurations[host], now);
   await saveLogins(state);
   await setState({ pendingLogin: { at: now }, ...(needsDuration ? { askDuration: { host } } : {}) });
+  if (switched) await speedUp();
   if (needsDuration) await openPopup();
   return { ok: true };
 }
@@ -368,7 +386,9 @@ async function setAccountMark({ host, email, marked }) {
     return { ok: true };
   }
   const durationMs = (await getSettings()).siteDurations[host];
-  await saveLogins(markAccount(logins, host, email, durationMs, Date.now()));
+  const next = markAccount(logins, host, email, durationMs, Date.now());
+  await saveLogins(next);
+  if (next !== logins) await speedUp();
   if (!durationMs) await setState({ askDuration: { host } });
   return { ok: true };
 }
@@ -390,6 +410,10 @@ const handlers = {
   loginDetected,
   setDuration,
   setAccountMark,
+  clearAutoShow: async () => {
+    await setState({ autoShow: null });
+    return { ok: true };
+  },
   askDuration: async ({ host }) => {
     await setState({ askDuration: { host } });
     return { ok: true };

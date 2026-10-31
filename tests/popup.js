@@ -33,6 +33,8 @@ globalThis.chrome = {
   permissions: { request: async p => { requested.push(p); return grant; } },
   runtime: { sendMessage: async msg => { sent.push(msg); return { ok: true }; } },
 };
+let closed = 0;
+window.close = () => { closed++; };
 
 await import('../popup/popup.js');
 
@@ -149,4 +151,29 @@ async function browserSwitch() {
   eq('desligar não pede acesso e avisa o worker', [requested.length, lastSent('setBrowserEnabled').enabled], [pedidos, false]);
 }
 
-await run([duration, siteLogins, browserSwitch]);
+async function receivedCode() {
+  const result = { id: 'r1', from: 'Predictus', subject: 'Código de verificação', date: Date.now(), isNew: false, items: [{ kind: 'code', value: '286282' }] };
+  store.session.results = [result, { ...result, id: 'r2', account: 'caixa2@gmail.com', items: [{ kind: 'code', value: '777111' }] }];
+  store.session.autoShow = { id: 'r1', at: Date.now() - 14_950 };
+  await update('session', { autoShow: {} });
+  eq('código recebido aparece em destaque', [$('auto-code').hidden, $('auto-code-value').textContent], [false, '286282']);
+  eq('mostra o e-mail que recebeu e a mensagem', $('auto-code-meta').textContent, 'a@gmail.com · Predictus · Código de verificação');
+  eq('avisa o worker que já mostrou', lastSent('clearAutoShow'), { type: 'clearAutoShow' });
+  await new Promise(r => setTimeout(r, 120));
+  eq('fecha sozinho depois do tempo', closed, 1);
+
+  store.session.autoShow = { id: 'r2', at: Date.now() - 14_950 };
+  await update('session', { autoShow: {} });
+  eq('código de outra caixa mostra essa caixa', [$('auto-code-value').textContent, $('auto-code-meta').textContent.split(' · ')[0]], ['777111', 'caixa2@gmail.com']);
+  document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 120));
+  eq('interagir mantém o popup aberto', closed, 1);
+
+  store.session.autoShow = { id: 'r1', at: Date.now() - 60_000 };
+  closed = 0;
+  await update('session', { autoShow: {} });
+  await new Promise(r => setTimeout(r, 60));
+  eq('aviso antigo não reabre nem fecha', [$('auto-code-value').textContent, closed], ['777111', 0]);
+}
+
+await run([duration, siteLogins, browserSwitch, receivedCode]);

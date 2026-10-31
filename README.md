@@ -53,6 +53,10 @@ O popup mostra "Conectado a voce@gmail.com" e o ícone mostra **OK** em verde. A
 - Clique numa conta para acompanhá-la, ou em **Entrar com outra conta** para adicionar uma.
 - O **×** ao lado da conta desconecta essa conta do OTPeek.
 
+### Código novo
+
+Quando chega um código novo, o popup abre sozinho e mostra o código em destaque, a caixa que o recebeu e a mensagem. Ele fecha em 15 segundos, a menos que você mexa nele. Se o Chrome não tiver janela ativa, o código abre numa janela pequena.
+
 ### Guardar a configuração
 
 Atualizar a extensão não apaga nada. Removê-la apaga, então guarde a configuração num arquivo:
@@ -133,6 +137,10 @@ The popup shows "Conectado a you@gmail.com" (Connected) and the icon shows a gre
 - Click the email at the top of the popup to see the connected accounts.
 - Click an account to watch it, or **Entrar com outra conta** (Sign in with another account) to add one.
 - The **×** next to an account disconnects it from OTPeek.
+
+### New code
+
+When a new code arrives, the popup opens by itself and shows the code, the mailbox that received it and the message. It closes after 15 seconds unless you interact with it. If Chrome has no active window, the code opens in a small window.
 
 ### Keep your configuration
 
