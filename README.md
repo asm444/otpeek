@@ -59,7 +59,7 @@ Quando chega um código novo, o popup abre sozinho e mostra o código em destaqu
 
 ### Atualizar
 
-O botão de recarregar, no topo do popup, também consulta a última release no GitHub. Se houver versão nova, o rodapé mostra o número e o comando `git pull` para copiar. Rode-o na pasta `otpeek` e clique em **Recarregar** no OTPeek em `chrome://extensions`. A extensão não roda o `git pull` sozinha, porque o Chrome não dá a ela acesso ao terminal nem à própria pasta. O rodapé também traz o link para apoiar o desenvolvimento.
+O botão de recarregar, no topo do popup, também consulta a última release no GitHub. Se houver versão nova, o rodapé mostra o número e o comando `git pull` para copiar. Rode-o na pasta `otpeek` e clique em **Já rodei: recarregar extensão**, no mesmo rodapé. A extensão não roda o `git pull` sozinha, porque o Chrome não dá a ela acesso ao terminal nem à própria pasta. O rodapé também traz o link para apoiar o desenvolvimento.
 
 ### Guardar a configuração
 
@@ -148,7 +148,7 @@ When a new code arrives, the popup opens by itself and shows the code, the mailb
 
 ### Update
 
-The reload button at the top of the popup also checks the latest GitHub release. When a new version exists, the footer shows its number and the `git pull` command to copy. Run it in the `otpeek` folder and click **Reload** on OTPeek in `chrome://extensions`. The extension does not run `git pull` itself, because Chrome gives it no access to the terminal or to its own folder. The footer also links to support the project.
+The reload button at the top of the popup also checks the latest GitHub release. When a new version exists, the footer shows its number and the `git pull` command to copy. Run it in the `otpeek` folder and click **Já rodei: recarregar extensão** (Done: reload extension) in the same footer. The extension does not run `git pull` itself, because Chrome gives it no access to the terminal or to its own folder. The footer also links to support the project.
 
 ### Keep your configuration
 

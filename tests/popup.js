@@ -31,9 +31,10 @@ globalThis.chrome = {
   storage: { local: area('local'), session: area('session'), onChanged: { addListener: fn => changed.push(fn) } },
   identity: { getRedirectURL: () => 'https://ext.chromiumapp.org/' },
   permissions: { request: async p => { requested.push(p); return grant; } },
-  runtime: { getManifest: () => ({ version: '0.9.0' }), sendMessage: async msg => { sent.push(msg); return { ok: true }; } },
+  runtime: { reload: () => { reloads++; }, getManifest: () => ({ version: '0.9.0' }), sendMessage: async msg => { sent.push(msg); return { ok: true }; } },
 };
 let closed = 0;
+let reloads = 0;
 window.close = () => { closed++; };
 
 await import('../popup/popup.js');
@@ -186,6 +187,9 @@ async function footer() {
   store.local.latestRelease = { version: '1.0.0', url: 'https://github.com/asm444/otpeek/releases/tag/v1.0.0' };
   await update('local', { latestRelease: {} });
   eq('versão nova mostra número, link e comando', [$('update-available').hidden, $('latest-link').textContent, $('latest-link').href, $('update-command').textContent], [false, 'v1.0.0', 'https://github.com/asm444/otpeek/releases/tag/v1.0.0', 'git pull']);
+  eq('recarregar só depois do clique', reloads, 0);
+  $('reload-extension').click();
+  eq('botão recarrega a extensão', reloads, 1);
 }
 
 await run([duration, siteLogins, browserSwitch, receivedCode, footer]);

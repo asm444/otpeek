@@ -429,6 +429,7 @@ function bindControls() {
     const r = await send({ type: 'setDuration', host: askDuration.host, durationMs, custom });
     showMessage('duration-error', r?.ok ? '' : r?.error);
   });
+  $('reload-extension').addEventListener('click', () => chrome.runtime.reload());
   $('copy-update').addEventListener('click', e => copy(e.target.parentElement, e.target, 'git pull'));
   $('dismiss-duration').addEventListener('click', () => send({ type: 'dismissDuration' }));
   $('clear-logins').addEventListener('click', () => send({ type: 'clearLogins' }));
