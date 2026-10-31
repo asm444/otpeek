@@ -262,6 +262,11 @@ function bindControls() {
     await saveSettings({ clientId: '' });
   });
 
+  $('save-config').addEventListener('click', async () => {
+    const r = await send({ type: 'saveConfig' });
+    showMessage('error', r?.ok ? '' : 'O arquivo não foi salvo.');
+  });
+
   $('google-btn').addEventListener('click', () => connect('login-error', settings.accountEmail));
   $('add-account').addEventListener('click', () => connect('accounts-error'));
 }

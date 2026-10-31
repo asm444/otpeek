@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Mostra os códigos de verificação e links de confirmação que chegam no seu Gmail, processados localmente.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAy7j4RcJjl2Nd2eT/aE7lAF+XJgxMJwCJV4NTpHH0hlTn7f5z+LZ4yKPZnFKQapuZETxWybv6J8jAYTvYfX0eDYIhkYcLiu2Z89+rs4+p2VecvtwDjQWBLyEQNbmF+ILDaPS1AutehuGknt9Spb6JegxIkbAIrjNf+T6BLpvqPVtzYAsYFrwqrSqwhC87YWS9OoJ3HwBJZh4N09sFT9YXDrO0Z/lT7GlWIxEtnOKFLVZILBV3GcOSS5/ZB8KUfO7aOzy5U4yHEaeJy8BQS8sU/ZioqODKwclREOtLLW+AFkAgs1xxzpZN9kiqLqRcLMkaczN5u76tqn/sssWyw3nP5QIDAQAB",
-  "permissions": ["identity", "storage", "alarms"],
+  "permissions": ["identity", "storage", "alarms", "downloads"],
   "host_permissions": ["https://gmail.googleapis.com/*", "https://www.googleapis.com/oauth2/v3/userinfo"],
   "background": {
     "service_worker": "background.js",

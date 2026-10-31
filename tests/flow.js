@@ -1,9 +1,11 @@
 import { eq, run } from './harness.js';
 import { message } from './fixtures.js';
+import { parseConfig, serializeConfig } from '../src/config-file.js';
 
 const REDIRECT = 'https://ebceaflpcefmmgchplhcphdipkolebik.chromiumapp.org/';
 const store = { local: {}, session: {} };
 const listeners = { message: [] };
+const downloads = [];
 const badge = { text: '' };
 const calls = [];
 const authCalls = [];
@@ -31,7 +33,8 @@ globalThis.chrome = {
     },
   },
   alarms: { get: async () => null, create: async () => {}, onAlarm: event() },
-  runtime: { onMessage: event(listeners.message), onStartup: event(), onInstalled: event() },
+  downloads: { download: async opts => { downloads.push(opts); return 1; } },
+  runtime: { getURL: path => `http://extensao.test/${path}`, onMessage: event(listeners.message), onStartup: event(), onInstalled: event() },
   action: { setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
 };
 
@@ -171,4 +174,40 @@ async function expiredHistory() {
   eq('history expirado zera e refaz a primeira leitura', (await bg.getState()).historyId, '100');
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory]);
+async function configFile() {
+  const r = await dispatch({ type: 'saveConfig' });
+  const saved = downloads.at(-1);
+  const content = decodeURIComponent(saved.url.split(',').slice(1).join(','));
+  eq('salvar abre o diálogo com o nome do arquivo', [r.ok, saved.filename, saved.saveAs], [true, 'otpeek.config.json', true]);
+  eq('arquivo salvo traz a configuração', JSON.parse(content).clientId, '123-abc.apps.googleusercontent.com');
+  eq('arquivo salvo não traz token nem e-mails lidos', /tok-|results|tokens/.test(content), false);
+
+  const atual = settings();
+  responses.set('GET /otpeek.config.json', { body: { clientId: 'outro.apps.googleusercontent.com' } });
+  eq('não sobrescreve configuração existente', [await bg.restoreFromFile(), settings().clientId], [false, atual.clientId]);
+
+  store.local.settings = {};
+  responses.delete('GET /otpeek.config.json');
+  eq('sem arquivo segue pedindo configuração', [await bg.restoreFromFile(), settings().clientId ?? ''], [false, '']);
+
+  const leitura = (async () => {
+    responses.set('GET /otpeek.config.json', { body: JSON.parse(content) });
+    return bg.restoreFromFile();
+  })();
+  eq('reinstalação restaura do arquivo', await leitura, true);
+  eq('restaura client ID e contas', [settings().clientId, settings().accounts, settings().accountEmail],
+    ['123-abc.apps.googleusercontent.com', ['b@gmail.com'], 'b@gmail.com']);
+  eq('volta a monitorar sem novo login', (await bg.getState()).status, 'ok');
+}
+
+async function configParsing() {
+  const clientId = 'x.apps.googleusercontent.com';
+  eq('JSON inválido é ignorado', parseConfig('{quebrado'), null);
+  eq('sem client ID válido é ignorado', parseConfig(JSON.stringify({ clientId: 'abc' })), null);
+  eq('campo inválido cai no padrão', parseConfig(JSON.stringify({ clientId, intervalSec: 1, scope: 'x', enabled: 'sim' })), { clientId, accounts: [], accountEmail: null });
+  eq('foto fora de https é descartada', 'photos' in parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': 'javascript:alert(1)' } })), false);
+  eq('conta atual fora da lista passa para a primeira', parseConfig(JSON.stringify({ clientId, accounts: ['a@b.c'], accountEmail: 'z@b.c' })).accountEmail, 'a@b.c');
+  eq('ida e volta preserva', parseConfig(serializeConfig({ clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 })), { clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 });
+}
+
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing]);

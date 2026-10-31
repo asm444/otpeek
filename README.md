@@ -53,6 +53,15 @@ O popup mostra "Conectado a voce@gmail.com" e o ícone mostra **OK** em verde. A
 - Clique numa conta para acompanhá-la, ou em **Entrar com outra conta** para adicionar uma.
 - O **×** ao lado da conta desconecta essa conta do OTPeek.
 
+### Guardar a configuração
+
+Atualizar a extensão não apaga nada. Removê-la apaga, então guarde a configuração num arquivo:
+
+1. Em **Opções**, clique em **Salvar**, ao lado de **Arquivo de configuração**.
+2. Salve `otpeek.config.json` na pasta `otpeek`.
+
+Ao carregar a extensão de novo, o client ID, as contas e as opções voltam sozinhos. O arquivo tem o client ID e os seus e-mails, nunca o acesso ao Gmail, e o Git o ignora. Salve de novo depois de mudar algo: o arquivo não se atualiza sozinho. Se você apagar a pasta, copie o arquivo antes.
+
 ### Problemas comuns
 
 - **"Erro 400: redirect_uri_mismatch"**: o endereço de redirecionamento no Google Cloud difere do que o popup mostra. Copie de novo pelo botão **Copiar** do popup.
@@ -113,6 +122,15 @@ The popup shows "Conectado a you@gmail.com" (Connected) and the icon shows a gre
 - Click the email at the top of the popup to see the connected accounts.
 - Click an account to watch it, or **Entrar com outra conta** (Sign in with another account) to add one.
 - The **×** next to an account disconnects it from OTPeek.
+
+### Keep your configuration
+
+Updating the extension erases nothing. Removing it does, so keep the configuration in a file:
+
+1. In **Opções** (Options), click **Salvar** (Save) next to **Arquivo de configuração** (Configuration file).
+2. Save `otpeek.config.json` in the `otpeek` folder.
+
+When you load the extension again, the client ID, accounts and options come back on their own. The file holds the client ID and your email addresses, never Gmail access, and Git ignores it. Save again after changing something: the file does not update itself. If you delete the folder, copy the file first.
 
 ### Common problems
 

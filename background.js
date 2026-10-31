@@ -2,6 +2,7 @@ import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
+import { CONFIG_FILE, parseConfig, serializeConfig } from './src/config-file.js';
 
 export const DEFAULTS = {
   clientId: '',
@@ -246,7 +247,30 @@ async function markSeen() {
   return { ok: true };
 }
 
+// A extensao nao escreve na propria pasta: o arquivo chega la pelo dialogo de salvar, e aqui so e lido.
+export async function restoreFromFile() {
+  if ((await getSettings()).clientId) return false;
+  let text;
+  try {
+    text = await (await fetch(chrome.runtime.getURL(CONFIG_FILE))).text();
+  } catch {
+    return false;
+  }
+  const patch = parseConfig(text);
+  if (!patch) return false;
+  await saveSettings(patch);
+  await loop();
+  return true;
+}
+
+async function saveConfig() {
+  const url = `data:application/json;charset=utf-8,${encodeURIComponent(serializeConfig(await getSettings()))}`;
+  await chrome.downloads.download({ url, filename: CONFIG_FILE, saveAs: true, conflictAction: 'overwrite' });
+  return { ok: true };
+}
+
 const handlers = {
+  saveConfig,
   connect,
   select,
   forget,
@@ -296,5 +320,6 @@ chrome.alarms.onAlarm.addListener(alarm => {
 
 chrome.runtime.onStartup.addListener(ensureWatchdog);
 chrome.runtime.onInstalled.addListener(ensureWatchdog);
+chrome.runtime.onInstalled.addListener(restoreFromFile);
 ensureWatchdog();
 resume();
