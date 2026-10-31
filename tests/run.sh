@@ -8,7 +8,7 @@ srv=$!
 trap 'kill $srv' EXIT
 for _ in $(seq 50); do curl -s "http://127.0.0.1:$port/" >/dev/null && break; sleep 0.1; done
 status=0
-for suite in unit flow; do
+for suite in unit flow popup; do
   printf '<!doctype html><meta charset="utf-8"><script type="module" src="%s.js"></script>' "$suite" > "tests/$suite.html"
   out=$(google-chrome --headless=new --disable-gpu --no-first-run --user-data-dir="$(mktemp -d)" \
     --virtual-time-budget=10000 --dump-dom "http://127.0.0.1:$port/tests/$suite.html" 2>/dev/null \
