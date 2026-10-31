@@ -1,6 +1,8 @@
 import { eq, run } from './harness.js';
 import { decodeEntities, extract, findCode, htmlToText } from '../src/extract.js';
 import { b64url, latin1, message } from './fixtures.js';
+import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, recordLogin } from '../src/logins.js';
+import '../src/login-detect.js';
 import { parseMessage, senderName, decodeEncodedWords } from '../src/mime.js';
 
 const msg = ({ subject = '', text = '', html = '' }) => ({ subject, text, html });
@@ -153,4 +155,62 @@ async function formatos() {
   for (const [nome, corpo] of recusados) eq(`recusa: ${nome}`, findCode('', corpo), null);
 }
 
-await run([codes, links, mime, fishAudio, predictus, formatos]);
+async function logins() {
+  const DIA = 86_400_000;
+  const login = (s, email, dur, now = 1000, host = 'a.example') => recordLogin(s, { host, email }, dur, now);
+  const r1 = login(emptyLogins(), 'A@x.com');
+  eq('primeiro login entra sem riscar', r1.state.accounts, [{ host: 'a.example', email: 'a@x.com', struck: false, until: null }]);
+  eq('primeiro login não é troca', [r1.switched, r1.needsDuration], [false, false]);
+  eq('mesmo e-mail não muda nada', login(r1.state, 'a@x.com').state === r1.state, true);
+
+  const r2 = login(r1.state, 'b@x.com', DIA);
+  eq('troca com duração risca e conta', r2.state.accounts.map(a => [a.email, a.struck, a.until]), [['b@x.com', false, null], ['a@x.com', true, 1000 + DIA]]);
+  eq('troca com duração não pergunta', [r2.switched, r2.needsDuration], [true, false]);
+
+  const r3 = login(r1.state, 'b@x.com');
+  eq('troca sem duração pergunta e fica sem prazo', [r3.needsDuration, r3.state.accounts[1].until], [true, null]);
+  eq('duração escolhida vale para o riscado do site', applyDuration(r3.state, 'a.example', DIA, 5).accounts[1].until, 5 + DIA);
+  eq('duração não atinge outro site', applyDuration(r3.state, 'z.example', DIA, 5).accounts[1].until, null);
+
+  const r4 = login(r2.state, 'c@x.com', DIA, 2000);
+  eq('conta nova entra antes das riscadas', r4.state.accounts.map(a => a.email), ['c@x.com', 'a@x.com', 'b@x.com']);
+  const volta = login(r4.state, 'a@x.com', DIA, 3000);
+  eq('voltar a uma conta riscada tira o risco e não duplica', volta.state.accounts.map(a => [a.email, a.struck]), [['a@x.com', false], ['b@x.com', true], ['c@x.com', true]]);
+
+  const outro = login(r2.state, 'b@x.com', DIA, 1000, 'b.example');
+  eq('mesmo e-mail em outro site não é troca', [outro.switched, outro.state.accounts.length, outro.state.sites['b.example']], [false, 3, 'b@x.com']);
+
+  eq('lembrete em andamento mantém o risco', expireReminders(r2.state, DIA) === r2.state, true);
+  eq('lembrete vencido volta ao normal', expireReminders(r2.state, 1000 + DIA).accounts[1], { host: 'a.example', email: 'a@x.com', struck: false, until: null });
+  eq('riscado sem prazo não vence', expireReminders(r3.state, 9e15) === r3.state, true);
+
+  let cheio = emptyLogins();
+  for (let i = 0; i < 205; i++) cheio = login(cheio, `u${i}@x.com`, 0, 1, `s${i}.example`).state;
+  eq('lista tem teto de 200 e tira a entrada mais antiga', [cheio.accounts.length, 's0.example' in cheio.sites, 's204.example' in cheio.sites], [200, false, true]);
+
+  eq('host sem www', hostOf('https://www.svc.example/login?x=1'), 'svc.example');
+  eq('página interna do Chrome não tem host', hostOf('chrome://settings/'), null);
+  eq('e-mail válido', isValidEmail('a@b.co'), true);
+  eq('e-mail longo demais', isValidEmail(`${'a'.repeat(250)}@b.co`), false);
+}
+
+async function loginForms() {
+  const detect = (html, href = 'https://x.example/conta') => {
+    const form = document.createElement('form');
+    form.innerHTML = html;
+    for (const i of form.querySelectorAll('input[data-v]')) i.value = i.dataset.v;
+    return otpeekDetectLogin(form, href);
+  };
+  eq('e-mail com senha', detect('<input type="email" data-v="a@x.com"><input type="password" data-v="segredo123">'), 'a@x.com');
+  eq('resultado nunca traz a senha', detect('<input type="password" data-v="s@x.com"><input type="email" data-v="a@x.com">'), 'a@x.com');
+  eq('só a senha parecendo e-mail não é lida', detect('<input type="password" data-v="s@x.com"><button>Entrar</button>'), null);
+  eq('passo só com e-mail e botão Continuar', detect('<input type="email" data-v="a@x.com"><button>Continuar</button>'), 'a@x.com');
+  eq('campo de texto chamado username', detect('<input type="text" name="username" data-v="a@x.com"><input type="password">'), 'a@x.com');
+  eq('URL de login sem botão reconhecível', detect('<input type="email" data-v="a@x.com">', 'https://x.example/signin'), 'a@x.com');
+  eq('newsletter não é login', detect('<input type="email" data-v="a@x.com"><button>Assinar</button>'), null);
+  eq('campo de texto qualquer é ignorado', detect('<input type="text" name="busca" data-v="a@x.com"><input type="password">'), null);
+  eq('campo sem e-mail válido', detect('<input type="email" data-v="abc"><input type="password">'), null);
+  eq('hidden é ignorado', detect('<input type="hidden" name="email" data-v="a@x.com"><input type="password">'), null);
+}
+
+await run([codes, links, mime, fishAudio, predictus, formatos, logins, loginForms]);

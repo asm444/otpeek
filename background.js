@@ -2,6 +2,7 @@ import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
+import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, recordLogin } from './src/logins.js';
 import { CONFIG_FILE, parseConfig, serializeConfig } from './src/config-file.js';
 
 export const DEFAULTS = {
@@ -14,6 +15,8 @@ export const DEFAULTS = {
   scope: 'recent',
   maxResults: 20,
   kinds: { codes: true, links: true },
+  browserEnabled: false,
+  siteDurations: {},
 };
 
 const QUERIES = {
@@ -22,6 +25,10 @@ const QUERIES = {
 };
 const SEEN_CAP = 2000;
 const WATCHDOG = 'watchdog';
+const LOGIN_WINDOW_MS = 5 * 60_000;
+const CLOCK_SKEW_MS = 60_000;
+const SITE_ORIGINS = ['http://*/*', 'https://*/*'];
+const LOGIN_WATCH = 'login-watch';
 const FRESH = { results: [], seen: [], historyId: null, email: null };
 
 export async function getSettings() {
@@ -33,13 +40,13 @@ async function saveSettings(patch) {
   await chrome.storage.local.set({ settings: { ...(await getSettings()), ...patch } });
 }
 
-const STATE_KEYS = ['results', 'seen', 'historyId', 'lastRun', 'status', 'error', 'email', 'justConnected', 'tokens'];
+const STATE_KEYS = ['results', 'seen', 'historyId', 'lastRun', 'status', 'error', 'email', 'justConnected', 'tokens', 'pendingLogin', 'askDuration'];
 
 export async function getState() {
   const s = await chrome.storage.session.get(STATE_KEYS);
   return {
     results: [], seen: [], historyId: null, lastRun: 0, status: 'idle', error: null,
-    email: null, justConnected: null, tokens: {}, ...s,
+    email: null, justConnected: null, tokens: {}, pendingLogin: null, askDuration: null, ...s,
   };
 }
 
@@ -107,6 +114,43 @@ async function updateBadge(results) {
   await chrome.action.setBadgeText({ text: n ? String(n) : justConnected ? 'OK' : '' });
 }
 
+async function getLogins() {
+  const { logins } = await chrome.storage.local.get('logins');
+  return logins || emptyLogins();
+}
+
+const saveLogins = logins => chrome.storage.local.set({ logins });
+
+async function openPopup() {
+  try {
+    await chrome.action.openPopup();
+  } catch {
+    await chrome.windows.create({ url: chrome.runtime.getURL('popup/popup.html'), type: 'popup', width: 380, height: 560 });
+  }
+}
+
+async function scanOtherBoxes(s, pending, seen) {
+  const found = [];
+  const after = Math.floor((pending.at - CLOCK_SKEW_MS) / 1000);
+  for (const account of s.accounts) {
+    if (account === s.accountEmail) continue;
+    try {
+      const api = clientFor({ ...s, accountEmail: account });
+      const { messages = [] } = await api.list(`in:inbox after:${after}`);
+      for (const { id } of messages) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const msg = parseMessage(await api.get(id));
+        const items = extract(msg, s.kinds);
+        if (items.length) found.push({ id, account, from: senderName(msg.from), subject: msg.subject, date: msg.date, items, isNew: true });
+      }
+    } catch {
+      continue;
+    }
+  }
+  return found;
+}
+
 async function runTick() {
   const s = await getSettings();
   if (!s.clientId) return setState({ status: 'setup' });
@@ -134,11 +178,16 @@ async function runTick() {
         found.push({ id, from: senderName(msg.from), subject: msg.subject, date: msg.date, items, isNew: true });
       }
     }
+    const pending = Date.now() - st.pendingLogin?.at <= LOGIN_WINDOW_MS ? st.pendingLogin : null;
+    if (pending) found.push(...await scanOtherBoxes(s, pending, seen));
+    const codeArrived = pending && found.some(r => r.date >= pending.at - CLOCK_SKEW_MS && r.items.some(i => i.kind === 'code'));
     const results = mergeResults(st.results, found, s.maxResults);
     const patch = { results, seen: [...seen].slice(-SEEN_CAP), historyId, email: s.accountEmail, lastRun: Date.now(), status: 'ok', error: null };
     if (st.email !== s.accountEmail) patch.justConnected = s.accountEmail;
+    if (codeArrived || !pending) patch.pendingLogin = null;
     await setState(patch);
     await updateBadge(results);
+    if (codeArrived) await openPopup();
   } catch (e) {
     if (e instanceof AuthError) return setState({ status: 'reauth', error: e.message, lastRun: Date.now() });
     // historyId expirado (o Gmail guarda cerca de uma semana): zera e o proximo tick refaz a varredura.
@@ -231,8 +280,9 @@ async function forget({ email }) {
 
 async function trash({ id }) {
   const s = await getSettings();
-  await clientFor(s).trash(id);
   const st = await getState();
+  const account = st.results.find(r => r.id === id)?.account;
+  await clientFor(account ? { ...s, accountEmail: account } : s).trash(id);
   const results = st.results.filter(r => r.id !== id);
   await setState({ results });
   await updateBadge(results);
@@ -263,6 +313,52 @@ export async function restoreFromFile() {
   return true;
 }
 
+async function syncLoginWatch() {
+  const s = await getSettings();
+  const granted = await chrome.permissions.contains({ origins: SITE_ORIGINS });
+  if (s.browserEnabled && !granted) await saveSettings({ browserEnabled: false });
+  const active = s.browserEnabled && granted;
+  const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [LOGIN_WATCH] });
+  if (active && !registered.length) {
+    await chrome.scripting.registerContentScripts([{ id: LOGIN_WATCH, js: ['src/login-detect.js', 'src/login-watch.js'], matches: SITE_ORIGINS, runAt: 'document_idle' }]);
+  } else if (!active && registered.length) {
+    await chrome.scripting.unregisterContentScripts({ ids: [LOGIN_WATCH] });
+  }
+}
+
+async function setBrowserEnabled(browserEnabled) {
+  await saveSettings({ browserEnabled });
+  await syncLoginWatch();
+}
+
+const coversSites = permissions => SITE_ORIGINS.every(o => permissions.origins?.includes(o));
+
+async function loginDetected({ email }, sender) {
+  const s = await getSettings();
+  const host = hostOf(sender.tab?.url);
+  if (!s.browserEnabled || !host || !isValidEmail(email)) return { ok: false };
+  const now = Date.now();
+  const { state, needsDuration } = recordLogin(expireReminders(await getLogins(), now), { host, email }, s.siteDurations[host], now);
+  await saveLogins(state);
+  await setState({ pendingLogin: { at: now }, ...(needsDuration ? { askDuration: { host } } : {}) });
+  if (needsDuration) await openPopup();
+  return { ok: true };
+}
+
+async function setDuration({ host, durationMs }) {
+  const s = await getSettings();
+  await saveSettings({ siteDurations: { ...s.siteDurations, [host]: durationMs } });
+  await saveLogins(applyDuration(await getLogins(), host, durationMs, Date.now()));
+  await setState({ askDuration: null });
+  return { ok: true };
+}
+
+async function refreshReminders() {
+  const logins = await getLogins();
+  const next = expireReminders(logins, Date.now());
+  if (next !== logins) await saveLogins(next);
+}
+
 async function saveConfig() {
   const url = `data:application/json;charset=utf-8,${encodeURIComponent(serializeConfig(await getSettings()))}`;
   await chrome.downloads.download({ url, filename: CONFIG_FILE, saveAs: true, conflictAction: 'overwrite' });
@@ -271,6 +367,20 @@ async function saveConfig() {
 
 const handlers = {
   saveConfig,
+  loginDetected,
+  setDuration,
+  setBrowserEnabled: async ({ enabled }) => {
+    await setBrowserEnabled(enabled);
+    return { ok: true };
+  },
+  dismissDuration: async () => {
+    await setState({ askDuration: null });
+    return { ok: true };
+  },
+  clearLogins: async () => {
+    await saveLogins(emptyLogins());
+    return { ok: true };
+  },
   connect,
   select,
   forget,
@@ -282,10 +392,11 @@ const handlers = {
   },
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handler = handlers[msg?.type];
-  if (!handler) return false;
-  handler(msg)
+  const fromPage = sender.tab && !sender.url?.startsWith(chrome.runtime.getURL(''));
+  if (!handler || (fromPage && msg.type !== 'loginDetected')) return false;
+  handler(msg, sender)
     .then(sendResponse)
     .catch(e => sendResponse({ ok: false, error: String(e.message || e) }));
   return true;
@@ -315,11 +426,17 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === WATCHDOG) resume();
+  if (alarm.name === WATCHDOG) {
+    resume();
+    refreshReminders();
+  }
 });
 
 chrome.runtime.onStartup.addListener(ensureWatchdog);
 chrome.runtime.onInstalled.addListener(ensureWatchdog);
 chrome.runtime.onInstalled.addListener(restoreFromFile);
+chrome.permissions.onAdded.addListener(p => coversSites(p) && setBrowserEnabled(true));
+chrome.permissions.onRemoved.addListener(p => p.origins?.some(o => SITE_ORIGINS.includes(o)) && setBrowserEnabled(false));
 ensureWatchdog();
+syncLoginWatch();
 resume();

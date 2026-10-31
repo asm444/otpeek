@@ -6,6 +6,11 @@ const REDIRECT = 'https://ebceaflpcefmmgchplhcphdipkolebik.chromiumapp.org/';
 const store = { local: {}, session: {} };
 const listeners = { message: [] };
 const downloads = [];
+const perms = { granted: false, added: [], removed: [] };
+const scripts = [];
+let popupsOpened = 0;
+let popupRefused = false;
+const windowsCreated = [];
 const badge = { text: '' };
 const calls = [];
 const authCalls = [];
@@ -35,7 +40,18 @@ globalThis.chrome = {
   alarms: { get: async () => null, create: async () => {}, onAlarm: event() },
   downloads: { download: async opts => { downloads.push(opts); return 1; } },
   runtime: { getURL: path => `http://extensao.test/${path}`, onMessage: event(listeners.message), onStartup: event(), onInstalled: event() },
-  action: { setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
+  permissions: {
+    contains: async () => perms.granted,
+    onAdded: { addListener: fn => perms.added.push(fn) },
+    onRemoved: { addListener: fn => perms.removed.push(fn) },
+  },
+  scripting: {
+    getRegisteredContentScripts: async () => scripts.slice(),
+    registerContentScripts: async list => { scripts.push(...list); },
+    unregisterContentScripts: async () => { scripts.length = 0; },
+  },
+  windows: { create: async opts => { windowsCreated.push(opts); } },
+  action: { openPopup: async () => { if (popupRefused) throw new Error('Could not find an active browser window.'); popupsOpened++; }, setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
 };
 
 globalThis.fetch = async (url, init = {}) => {
@@ -210,4 +226,126 @@ async function configParsing() {
   eq('ida e volta preserva', parseConfig(serializeConfig({ clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 })), { clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing]);
+const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); await new Promise(r => setTimeout(r)); };
+const fromSite = url => ({ tab: { url } });
+const send = (msg, sender) => new Promise(resolve => {
+  if (listeners.message[0](msg, sender, resolve) === false) resolve('recusado');
+});
+const SITES = ['http://*/*', 'https://*/*'];
+
+async function browserWatch() {
+  store.local.settings = { ...settings(), browserEnabled: false, siteDurations: {} };
+  delete store.local.logins;
+  await flush();
+  eq('desligado, login detectado é ignorado', (await send({ type: 'loginDetected', email: 'x@y.com' }, fromSite('https://svc.example/login'))).ok, false);
+  eq('desligado, nada entra na lista', store.local.logins, undefined);
+  eq('desligado, nenhum script nas páginas', scripts.length, 0);
+
+  perms.granted = true;
+  perms.added[0]({ origins: SITES });
+  await flush();
+  eq('conceder o acesso liga e registra o script', [settings().browserEnabled, scripts[0]?.id, scripts[0]?.js], [true, 'login-watch', ['src/login-detect.js', 'src/login-watch.js']]);
+
+  eq('página não aciona outras ações', await send({ type: 'trash', id: 'm1' }, fromSite('https://svc.example/')), 'recusado');
+  eq('página da própria extensão aberta em aba é aceita', await send({ type: 'dismissDuration' }, { tab: { url: 'http://extensao.test/popup/popup.html' }, url: 'http://extensao.test/popup/popup.html' }), { ok: true });
+  eq('e-mail inválido é recusado', (await send({ type: 'loginDetected', email: 'nada' }, fromSite('https://svc.example/login'))).ok, false);
+
+  eq('login identificado registra', (await send({ type: 'loginDetected', email: 'A@y.com' }, fromSite('https://www.svc.example/login'))).ok, true);
+  eq('guarda o e-mail em uso no site', store.local.logins.sites, { 'svc.example': 'a@y.com' });
+  eq('primeiro login não pede duração', (await bg.getState()).askDuration, null);
+
+  const antes = popupsOpened;
+  await send({ type: 'loginDetected', email: 'b@y.com' }, fromSite('https://svc.example/login'));
+  eq('troca risca o e-mail anterior e o manda para o fim', store.local.logins.accounts.map(a => [a.email, a.struck, a.until]), [['b@y.com', false, null], ['a@y.com', true, null]]);
+  eq('primeira troca pede a duração e abre o popup', [(await bg.getState()).askDuration, popupsOpened - antes], [{ host: 'svc.example' }, 1]);
+
+  const t0 = Date.now();
+  await dispatch({ type: 'setDuration', host: 'svc.example', durationMs: 86_400_000 });
+  const riscado = store.local.logins.accounts.at(-1);
+  eq('duração salva para o site e aplicada', [settings().siteDurations, riscado.until >= t0 + 86_400_000], [{ 'svc.example': 86_400_000 }, true]);
+  eq('duração salva encerra o pedido', (await bg.getState()).askDuration, null);
+
+  await send({ type: 'loginDetected', email: 'c@y.com' }, fromSite('https://svc.example/login'));
+  eq('próxima troca usa a duração salva, sem perguntar', [(await bg.getState()).askDuration, store.local.logins.accounts.at(-1).until > 0], [null, true]);
+
+  eq('duração é salva no arquivo de configuração', JSON.parse(serializeConfig(settings())).siteDurations, { 'svc.example': 86_400_000 });
+  eq('estado de ligado não vai para o arquivo', 'browserEnabled' in JSON.parse(serializeConfig(settings())), false);
+}
+
+async function codeOpensPopup() {
+  responses.set('GET /history', { body: { historyId: '200' } });
+  store.session.pendingLogin = null;
+  await send({ type: 'loginDetected', email: 'd@y.com' }, fromSite('https://outro.example/login'));
+  const at = store.session.pendingLogin.at;
+
+  responses.set('GET /history', { body: { historyId: '201', history: [{ messagesAdded: [{ message: { id: 'p1' } }] }] } });
+  responses.set('GET /messages/p1', { body: message({ id: 'p1', subject: 'Ofertas', text: 'Promoções', date: at + 1000 }) });
+  let abertos = popupsOpened;
+  await bg.tick();
+  eq('e-mail sem código não abre o popup', popupsOpened, abertos);
+  eq('login segue pendente', store.session.pendingLogin?.at, at);
+
+  responses.set('GET /history', { body: { historyId: '202', history: [{ messagesAdded: [{ message: { id: 'p2' } }] }] } });
+  responses.set('GET /messages/p2', { body: message({ id: 'p2', subject: 'Código', text: 'Seu código: 445566', date: at + 2000 }) });
+  await bg.tick();
+  eq('código depois do login abre o popup', popupsOpened, abertos + 1);
+  eq('login pendente é consumido', store.session.pendingLogin, null);
+
+  abertos = popupsOpened;
+  responses.set('GET /history', { body: { historyId: '203', history: [{ messagesAdded: [{ message: { id: 'p3' } }] }] } });
+  responses.set('GET /messages/p3', { body: message({ id: 'p3', subject: 'Código', text: 'Seu código: 778899', date: at + 3000 }) });
+  await bg.tick();
+  eq('código sem login recente só entra na lista', [popupsOpened, (await bg.getState()).results.some(r => r.id === 'p3')], [abertos, true]);
+
+  store.session.pendingLogin = { at: Date.now() - 6 * 60_000, host: 'outro.example', email: 'd@y.com' };
+  responses.set('GET /history', { body: { historyId: '204', history: [{ messagesAdded: [{ message: { id: 'p4' } }] }] } });
+  responses.set('GET /messages/p4', { body: message({ id: 'p4', subject: 'Código', text: 'Seu código: 112233', date: Date.now() }) });
+  await bg.tick();
+  eq('login de mais de 5 minutos não abre o popup', [popupsOpened, store.session.pendingLogin], [abertos, null]);
+}
+
+async function otherBoxes() {
+  const s = settings();
+  store.local.settings = { ...s, accounts: ['b@gmail.com', 'c@gmail.com'], accountEmail: 'b@gmail.com' };
+  store.session.tokens['c@gmail.com'] = { token: 'tok-c', expiresAt: Date.now() + 3_600_000 };
+  await send({ type: 'loginDetected', email: 'fora@empresa.example' }, fromSite('https://terceiro.example/login'));
+  const at = store.session.pendingLogin.at;
+  responses.set('GET /history', { body: { historyId: '300' } });
+  responses.set('GET /messages', init => (init.headers.Authorization === 'Bearer tok-c' ? { body: { messages: [{ id: 'q1' }] } } : { body: {} }));
+  responses.set('GET /messages/q1', { body: message({ id: 'q1', subject: 'ENC: Código', text: 'Seu código: 286282', date: at + 1000 }) });
+  const abertos = popupsOpened;
+  await bg.tick();
+  const achado = (await bg.getState()).results.find(r => r.id === 'q1');
+  eq('código encaminhado é achado em outra caixa conectada', [achado?.items[0].value, achado?.account, popupsOpened - abertos], ['286282', 'c@gmail.com', 1]);
+
+  responses.set('POST /messages/q1/trash', init => (init.headers.Authorization === 'Bearer tok-c' ? { body: {} } : { status: 403, body: {} }));
+  eq('excluir usa a caixa de onde o e-mail veio', (await dispatch({ type: 'trash', id: 'q1' })).ok, true);
+}
+
+async function popupFallback() {
+  popupRefused = true;
+  await send({ type: 'loginDetected', email: 'e1@y.com' }, fromSite('https://janela.example/login'));
+  await send({ type: 'loginDetected', email: 'e2@y.com' }, fromSite('https://janela.example/login'));
+  popupRefused = false;
+  eq('sem janela ativa, abre o popup numa janela própria', windowsCreated.map(w => [w.url, w.type]), [['http://extensao.test/popup/popup.html', 'popup']]);
+  await dispatch({ type: 'dismissDuration' });
+  eq('agora não encerra o pedido', (await bg.getState()).askDuration, null);
+}
+
+async function browserToggle() {
+  await dispatch({ type: 'setBrowserEnabled', enabled: false });
+  eq('desligar para o script e mantém a permissão', [settings().browserEnabled, scripts.length, perms.granted], [false, 0, true]);
+  await dispatch({ type: 'setBrowserEnabled', enabled: true });
+  eq('religar com a permissão já concedida registra de novo', [settings().browserEnabled, scripts.length], [true, 1]);
+}
+
+async function browserOff() {
+  perms.granted = false;
+  perms.removed[0]({ origins: SITES });
+  await flush();
+  eq('retirar o acesso desliga e tira o script', [settings().browserEnabled, scripts.length], [false, 0]);
+  await dispatch({ type: 'clearLogins' });
+  eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
+}
+
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, browserToggle, browserOff]);
