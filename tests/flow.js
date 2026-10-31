@@ -227,6 +227,7 @@ async function configParsing() {
   eq('ida e volta preserva', parseConfig(serializeConfig({ clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 })), { clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 });
 }
 
+const emptyLoginsFor = () => ({ sites: {}, accounts: [] });
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); await new Promise(r => setTimeout(r)); };
 const fromSite = url => ({ tab: { url } });
 const send = (msg, sender) => new Promise(resolve => {
@@ -341,6 +342,28 @@ async function popupFallback() {
   eq('agora não encerra o pedido', (await bg.getState()).askDuration, null);
 }
 
+async function blocking() {
+  store.local.settings = { ...settings(), browserEnabled: true, blockedSites: [] };
+  store.local.logins = emptyLoginsFor();
+  await send({ type: 'loginDetected', email: 'a@y.com' }, fromSite('https://bloq.example/login'));
+  await send({ type: 'loginDetected', email: 'b@y.com' }, fromSite('https://fica.example/login'));
+  await dispatch({ type: 'forgetSite', host: 'bloq.example' });
+  eq('limpar site apaga só as contas dele', [store.local.logins.accounts.map(a => a.host), Object.keys(store.local.logins.sites)], [['fica.example'], ['fica.example']]);
+
+  await send({ type: 'loginDetected', email: 'a@y.com' }, fromSite('https://bloq.example/login'));
+  await dispatch({ type: 'blockSite', host: 'bloq.example' });
+  eq('bloquear apaga as contas e guarda o site', [store.local.logins.accounts.map(a => a.host), settings().blockedSites], [['fica.example'], ['bloq.example']]);
+  eq('site bloqueado não é mais identificado', [(await send({ type: 'loginDetected', email: 'c@y.com' }, fromSite('https://www.bloq.example/login'))).ok, store.local.logins.accounts.some(a => a.host === 'bloq.example')], [false, false]);
+  await dispatch({ type: 'blockSite', host: 'bloq.example' });
+  eq('bloquear de novo não duplica', settings().blockedSites, ['bloq.example']);
+  eq('nome de site inválido é recusado', (await dispatch({ type: 'blockSite', host: '<script>' })).ok, false);
+  eq('página não bloqueia site', await send({ type: 'blockSite', host: 'x.example' }, fromSite('https://x.example/')), 'recusado');
+  eq('bloqueio vai para o arquivo de configuração', JSON.parse(serializeConfig(settings())).blockedSites, ['bloq.example']);
+
+  await dispatch({ type: 'unblockSite', host: 'bloq.example' });
+  eq('desbloquear volta a identificar', [settings().blockedSites, (await send({ type: 'loginDetected', email: 'c@y.com' }, fromSite('https://bloq.example/login'))).ok], [[], true]);
+}
+
 async function identity() {
   const site = 'marca.example';
   store.local.logins = { sites: { [site]: 'um@y.com' }, accounts: [{ host: site, email: 'um@y.com', struck: false, until: null }] };
@@ -444,4 +467,4 @@ async function browserOff() {
   eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, identity, fastPolling, updates, browserToggle, browserOff]);
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, blocking, identity, fastPolling, updates, browserToggle, browserOff]);

@@ -14,6 +14,7 @@ const VALID = {
   scope: v => v === 'recent' || v === 'all',
   maxResults: inRange(5, 50),
   kinds: v => v && typeof v.codes === 'boolean' && typeof v.links === 'boolean',
+  blockedSites: v => Array.isArray(v) && v.length <= 500 && v.every(h => typeof h === 'string' && /^[a-z0-9.-]{1,253}$/.test(h)),
   customDurations: v => Array.isArray(v) && v.every(inRange(60_000, 366 * 86_400_000)),
   siteDurations: v => v && typeof v === 'object' && !Array.isArray(v)
     && Object.values(v).every(inRange(1, 366 * 86_400_000)),

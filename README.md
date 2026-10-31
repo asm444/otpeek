@@ -78,8 +78,9 @@ Os códigos e links do Gmail chegam sem isto. Em **Opções**, ligue **Identific
 - Quando um código chega em até 5 minutos depois do login, o popup abre sozinho. O código é procurado em todas as caixas conectadas, o que cobre e-mails encaminhados.
 - Se você entrar no mesmo site com outro e-mail, o anterior fica riscado no fim da lista **Identificação de contas**, durante o tempo que você escolher para aquele site. Depois, o risco sai.
 - O ícone de conta no topo do popup abre **Identificação de contas**. Nela, você muda o tempo de cada site, o que recalcula as contagens em andamento, e marca ou desmarca um e-mail para contar o tempo. **Outro tempo…** guarda uma duração sua como opção para todos os sites.
+- Em cada site, **Limpar** apaga as contas identificadas nele, e **Bloquear** apaga e para de identificar logins naquele site. A lista **Sites bloqueados** permite desbloquear.
 
-A lista fica só neste Chrome e não vai para o arquivo de configuração, que guarda apenas a duração de cada site. Logins dentro de iframes não são identificados.
+A lista fica só neste Chrome e não vai para o arquivo de configuração, que guarda apenas a duração de cada site e os sites bloqueados. Logins dentro de iframes não são identificados.
 
 ### Problemas comuns
 
@@ -167,8 +168,9 @@ Gmail codes and links arrive without this. In **Opções** (Options), turn on **
 - When a code arrives within 5 minutes of the login, the popup opens by itself. It searches every connected mailbox, which covers forwarded email.
 - If you sign in to the same site with another email, the previous one is struck through at the end of the **Identificação de contas** list for the time you pick for that site. Then the strike goes away.
 - The account icon at the top of the popup opens **Identificação de contas** (Account identification). There you change each site's time, which recalculates running counts, and check or uncheck an email to count its time. **Outro tempo…** (Other time) keeps your own duration as an option for every site.
+- On each site, **Limpar** (Clear) deletes the accounts identified there, and **Bloquear** (Block) deletes them and stops identifying logins on that site. The **Sites bloqueados** (Blocked sites) list lets you unblock.
 
-The list stays in this Chrome and does not go to the configuration file, which keeps only each site's duration. Logins inside iframes are not identified.
+The list stays in this Chrome and does not go to the configuration file, which keeps only each site's duration and the blocked sites. Logins inside iframes are not identified.
 
 ### Common problems
 

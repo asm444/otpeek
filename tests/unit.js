@@ -1,7 +1,7 @@
 import { eq, run } from './harness.js';
 import { decodeEntities, extract, findCode, htmlToText } from '../src/extract.js';
 import { b64url, latin1, message } from './fixtures.js';
-import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from '../src/logins.js';
+import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from '../src/logins.js';
 import '../src/login-detect.js';
 import { isNewer, parseRelease } from '../src/version.js';
 import { parseMessage, senderName, decodeEncodedWords } from '../src/mime.js';
@@ -202,6 +202,11 @@ async function logins() {
   const desmarcado = unmarkAccount(marcado, 'a.example', 'c@x.com');
   eq('desmarcar tira o risco, encerra e volta para antes dos riscados', [desmarcado.accounts[0].email, desmarcado.accounts[0].struck, desmarcado.accounts[0].until, 'since' in desmarcado.accounts[0]], ['c@x.com', false, null, false]);
   eq('login no e-mail ativo que foi marcado tira o risco', login(marcado, 'c@x.com', DIA, 8000).state.accounts.find(a => a.email === 'c@x.com').struck, false);
+
+  const doisSites = login(login(emptyLogins(), 'a@x.com').state, 'b@x.com', 0, 1, 'b.example').state;
+  const esquecido = forgetSite(doisSites, 'a.example');
+  eq('limpar site tira só as contas dele', [esquecido.accounts.map(a => a.host), esquecido.sites], [['b.example'], { 'b.example': 'b@x.com' }]);
+  eq('próximo login no site limpo não é troca', recordLogin(esquecido, { host: 'a.example', email: 'z@x.com' }, 0, 1).switched, false);
 
   eq('host sem www', hostOf('https://www.svc.example/login?x=1'), 'svc.example');
   eq('página interna do Chrome não tem host', hostOf('chrome://settings/'), null);

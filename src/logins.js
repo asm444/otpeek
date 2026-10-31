@@ -74,3 +74,8 @@ export function expireReminders(state, now) {
     accounts: state.accounts.map(a => (a.struck && a.until !== null && a.until <= now ? { host: a.host, email: a.email, struck: false, until: null } : a)),
   };
 }
+
+export function forgetSite(state, host) {
+  const { [host]: _, ...sites } = state.sites;
+  return { sites, accounts: state.accounts.filter(a => a.host !== host) };
+}

@@ -102,6 +102,23 @@ async function siteLogins() {
   const semTempo = $('site-logins').querySelector('[aria-label="Tempo de antigo.example"]');
   eq('site sem tempo pede para escolher', [semTempo.value, semTempo.options[0].textContent], ['', 'Escolher tempo']);
 
+  const limpar = [...$('site-logins').querySelectorAll('.site-actions button')].find(b => b.textContent === 'Limpar');
+  limpar.click();
+  await settle();
+  eq('limpar site envia o site', lastSent('forgetSite'), { type: 'forgetSite', host: 'svc.example' });
+  [...$('site-logins').querySelectorAll('.site-actions button')].find(b => b.textContent === 'Bloquear').click();
+  await settle();
+  eq('bloquear site envia o site', lastSent('blockSite'), { type: 'blockSite', host: 'svc.example' });
+  eq('sem bloqueados a lista fica escondida', $('blocked-card').hidden, true);
+  store.local.settings.blockedSites = ['ruim.example'];
+  await update('local', { settings: {} });
+  eq('mostra os sites bloqueados', [$('blocked-card').hidden, [...$('blocked-sites').children].map(li => li.querySelector('.email').textContent)], [false, ['ruim.example']]);
+  $('blocked-sites').querySelector('button').click();
+  await settle();
+  eq('desbloquear envia o site', lastSent('unblockSite'), { type: 'unblockSite', host: 'ruim.example' });
+  store.local.settings.blockedSites = [];
+  await update('local', { settings: {} });
+
   const marca = rows[0].querySelector('input');
   marca.checked = true;
   marca.dispatchEvent(new Event('change'));

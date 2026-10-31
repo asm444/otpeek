@@ -2,7 +2,7 @@ import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
-import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from './src/logins.js';
+import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from './src/logins.js';
 import { RELEASES_API, parseRelease } from './src/version.js';
 import { CONFIG_FILE, parseConfig, serializeConfig } from './src/config-file.js';
 
@@ -19,6 +19,7 @@ export const DEFAULTS = {
   browserEnabled: false,
   siteDurations: {},
   customDurations: [],
+  blockedSites: [],
 };
 
 const QUERIES = {
@@ -363,7 +364,7 @@ const coversSites = permissions => SITE_ORIGINS.every(o => permissions.origins?.
 async function loginDetected({ email }, sender) {
   const s = await getSettings();
   const host = hostOf(sender.tab?.url);
-  if (!s.browserEnabled || !host || !isValidEmail(email)) return { ok: false };
+  if (!s.browserEnabled || !host || s.blockedSites.includes(host) || !isValidEmail(email)) return { ok: false };
   const now = Date.now();
   const { state, switched, needsDuration } = recordLogin(expireReminders(await getLogins(), now), { host, email }, s.siteDurations[host], now);
   await saveLogins(state);
@@ -445,6 +446,22 @@ const handlers = {
   },
   clearLogins: async () => {
     await saveLogins(emptyLogins());
+    return { ok: true };
+  },
+  forgetSite: async ({ host }) => {
+    await saveLogins(forgetSite(await getLogins(), host));
+    return { ok: true };
+  },
+  blockSite: async ({ host }) => {
+    if (typeof host !== 'string' || !/^[a-z0-9.-]{1,253}$/.test(host)) return { ok: false };
+    const s = await getSettings();
+    await saveLogins(forgetSite(await getLogins(), host));
+    if (!s.blockedSites.includes(host)) await saveSettings({ blockedSites: [...s.blockedSites, host].slice(-500) });
+    return { ok: true };
+  },
+  unblockSite: async ({ host }) => {
+    const s = await getSettings();
+    await saveSettings({ blockedSites: s.blockedSites.filter(h => h !== host) });
     return { ok: true };
   },
   connect,

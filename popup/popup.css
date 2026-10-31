@@ -436,3 +436,8 @@ p.error { margin: 4px 4px 0; padding: 8px 12px; border-radius: 10px; background:
 .footer { display: grid; gap: 4px; padding: 8px 12px 12px; color: var(--muted); font-size: 11.5px; text-align: center; }
 .footer .update { display: grid; gap: 4px; text-align: left; color: var(--fg); }
 .footer a { color: var(--accent); }
+
+.site-actions { display: flex; align-items: center; gap: 4px; }
+.site-actions .ghost-btn { padding: 2px 8px; font-size: 11.5px; }
+.site-head { flex-wrap: wrap; }
+.site-head strong { flex-basis: 100%; }

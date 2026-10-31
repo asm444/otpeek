@@ -15,6 +15,7 @@ const DEFAULTS = {
   browserEnabled: false,
   siteDurations: {},
   customDurations: [],
+  blockedSites: [],
 };
 
 const BASE_DURATIONS = [12 * 3_600_000, 86_400_000, 3 * 86_400_000, 7 * 86_400_000, 30 * 86_400_000];
@@ -235,7 +236,15 @@ function renderSiteGroup(host, accounts, now) {
       send({ type: 'setDuration', host, durationMs: Number(select.value) });
     }
   });
-  head.append(name, select);
+  const actions = document.createElement('div');
+  actions.className = 'site-actions';
+  const action = (text, type) => {
+    const button = Object.assign(document.createElement('button'), { className: 'ghost-btn', textContent: text });
+    button.addEventListener('click', () => send({ type, host }));
+    return button;
+  };
+  actions.append(select, action('Limpar', 'forgetSite'), action('Bloquear', 'blockSite'));
+  head.append(name, actions);
   const rows = document.createElement('ul');
   rows.append(...accounts.map(a => renderAccountRow(a, now)));
   li.append(head, rows);
@@ -246,12 +255,22 @@ async function renderIdentity() {
   const { logins } = await chrome.storage.local.get('logins');
   const accounts = logins?.accounts ?? [];
   const now = Date.now();
-  const signature = JSON.stringify([accounts, settings.siteDurations, settings.customDurations, Math.floor(now / 60_000)]);
+  const signature = JSON.stringify([accounts, settings.siteDurations, settings.customDurations, settings.blockedSites, Math.floor(now / 60_000)]);
   if (signature === identitySignature) return;
   identitySignature = signature;
   $('identity-empty').hidden = accounts.length > 0;
   const hosts = new Map();
   for (const a of accounts) hosts.set(a.host, [...(hosts.get(a.host) ?? []), a]);
+  $('blocked-card').hidden = settings.blockedSites.length === 0;
+  $('blocked-sites').replaceChildren(...settings.blockedSites.map(host => {
+    const li = document.createElement('li');
+    li.className = 'site-login';
+    const name = Object.assign(document.createElement('span'), { className: 'email', textContent: host });
+    const button = Object.assign(document.createElement('button'), { className: 'ghost-btn', textContent: 'Desbloquear' });
+    button.addEventListener('click', () => send({ type: 'unblockSite', host }));
+    li.append(name, button);
+    return li;
+  }));
   $('site-logins').replaceChildren(...[...hosts].map(([host, list]) => renderSiteGroup(host, list, now)));
 }
 
