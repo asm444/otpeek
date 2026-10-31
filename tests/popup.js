@@ -11,6 +11,8 @@ const store = {
       accounts: [
         { host: 'svc.example', email: 'novo@x.com', struck: false, until: null },
         { host: 'svc.example', email: 'velho@x.com', struck: true, until: Date.now() + 3 * 3_600_000 },
+        { host: 'svc.example', email: 'longo@x.com', struck: true, until: Date.now() + 36 * 3_600_000 },
+        { host: 'svc.example', email: 'dias@x.com', struck: true, until: Date.now() + 72 * 3_600_000 },
         { host: 'antigo.example', email: 'vencido@x.com', struck: true, until: Date.now() - 1000 },
       ],
     },
@@ -49,7 +51,16 @@ async function duration() {
   $('duration-select').value = '604800000';
   $('save-duration').click();
   await settle();
-  eq('salvar envia o site e a duração escolhida', lastSent('setDuration'), { type: 'setDuration', host: 'svc.example', durationMs: 604800000 });
+  eq('salvar envia o site e a duração escolhida', lastSent('setDuration'), { type: 'setDuration', host: 'svc.example', durationMs: 604800000, custom: false });
+  eq('outro tempo fica escondido até ser escolhido', $('custom-duration').hidden, true);
+  $('duration-select').value = 'custom';
+  $('duration-select').dispatchEvent(new Event('change'));
+  eq('escolher outro tempo mostra o campo', $('custom-duration').hidden, false);
+  $('custom-amount').value = '36';
+  $('custom-unit').value = '3600000';
+  $('save-duration').click();
+  await settle();
+  eq('outro tempo envia horas em milissegundos', lastSent('setDuration'), { type: 'setDuration', host: 'svc.example', durationMs: 36 * 3_600_000, custom: true });
   $('dismiss-duration').click();
   await settle();
   eq('agora não encerra o pedido', lastSent('dismissDuration'), { type: 'dismissDuration' });
@@ -59,18 +70,57 @@ async function duration() {
 }
 
 async function siteLogins() {
-  $('account-pill').click();
+  eq('ícone escondido com a função desligada', $('identity-toggle').hidden, true);
+  store.local.settings.browserEnabled = true;
+  store.local.settings.siteDurations = { 'svc.example': 86_400_000 };
+  store.local.settings.customDurations = [36 * 3_600_000];
+  await update('local', { settings: {} });
+  eq('ícone aparece com a função ligada', $('identity-toggle').hidden, false);
+  $('identity-toggle').click();
   await settle();
-  const rows = [...$('site-logins').children];
-  eq('mostra os e-mails na ordem da lista', rows.map(r => r.querySelector('.email').textContent), ['novo@x.com', 'velho@x.com', 'vencido@x.com']);
-  eq('só o lembrete em andamento fica riscado', rows.map(r => r.querySelector('.email').classList.contains('struck')), [false, true, false]);
-  eq('mostra o tempo restante', rows[1].querySelector('small').textContent, 'svc.example · 3 h');
+  eq('ícone abre a aba de identificação', [$('identity-view').hidden, $('list-view').hidden, $('identity-toggle').getAttribute('aria-expanded')], [false, true, 'true']);
+  const rows = [...$('site-logins').querySelectorAll('.site-login')];
+  eq('mostra os e-mails na ordem da lista', rows.map(r => r.querySelector('.email').textContent), ['novo@x.com', 'velho@x.com', 'longo@x.com', 'dias@x.com', 'vencido@x.com']);
+  eq('só o lembrete em andamento fica riscado', rows.map(r => r.querySelector('.email').classList.contains('struck')), [false, true, true, true, false]);
+  eq('checkbox segue o risco', rows.map(r => r.querySelector('input').checked), [false, true, true, true, false]);
+  eq('mostra o tempo restante', rows.slice(1, 4).map(r => r.querySelector('small').textContent), ['3 h', '36 h', '3 d']);
+
+  const seletor = $('site-logins').querySelector('[aria-label="Tempo de svc.example"]');
+  eq('seletor mostra o tempo salvo', seletor.value, '86400000');
+  eq('seletor oferece o tempo personalizado', [...seletor.options].some(o => o.textContent === '36 horas'), true);
+  seletor.value = '604800000';
+  seletor.dispatchEvent(new Event('change'));
+  await settle();
+  eq('editar o tempo envia ao worker', lastSent('setDuration'), { type: 'setDuration', host: 'svc.example', durationMs: 604800000 });
+  seletor.value = 'custom';
+  seletor.dispatchEvent(new Event('change'));
+  await settle();
+  eq('outro tempo pede a escolha', lastSent('askDuration'), { type: 'askDuration', host: 'svc.example' });
+  const semTempo = $('site-logins').querySelector('[aria-label="Tempo de antigo.example"]');
+  eq('site sem tempo pede para escolher', [semTempo.value, semTempo.options[0].textContent], ['', 'Escolher tempo']);
+
+  const marca = rows[0].querySelector('input');
+  marca.checked = true;
+  marca.dispatchEvent(new Event('change'));
+  await settle();
+  eq('marcar envia ao worker', lastSent('setAccountMark'), { type: 'setAccountMark', host: 'svc.example', email: 'novo@x.com', marked: true });
+  const desmarca = rows[1].querySelector('input');
+  desmarca.checked = false;
+  desmarca.dispatchEvent(new Event('change'));
+  await settle();
+  eq('desmarcar envia ao worker', lastSent('setAccountMark'), { type: 'setAccountMark', host: 'svc.example', email: 'velho@x.com', marked: false });
+
   $('clear-logins').click();
   await settle();
   eq('limpar pede a remoção da lista', lastSent('clearLogins'), { type: 'clearLogins' });
   store.local.logins = { sites: {}, accounts: [] };
   await update('local', { logins: {} });
-  eq('lista vazia esconde o cartão', $('site-logins-card').hidden, true);
+  eq('lista vazia mostra o aviso', [$('identity-empty').hidden, $('site-logins').children.length], [false, 0]);
+  $('identity-toggle').click();
+  await settle();
+  eq('segundo clique volta para a lista', $('identity-view').hidden, true);
+  store.local.settings.browserEnabled = false;
+  await update('local', { settings: {} });
 }
 
 async function browserSwitch() {

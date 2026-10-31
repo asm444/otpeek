@@ -1,7 +1,7 @@
 import { eq, run } from './harness.js';
 import { decodeEntities, extract, findCode, htmlToText } from '../src/extract.js';
 import { b64url, latin1, message } from './fixtures.js';
-import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, recordLogin } from '../src/logins.js';
+import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from '../src/logins.js';
 import '../src/login-detect.js';
 import { parseMessage, senderName, decodeEncodedWords } from '../src/mime.js';
 
@@ -187,6 +187,20 @@ async function logins() {
   let cheio = emptyLogins();
   for (let i = 0; i < 205; i++) cheio = login(cheio, `u${i}@x.com`, 0, 1, `s${i}.example`).state;
   eq('lista tem teto de 200 e tira a entrada mais antiga', [cheio.accounts.length, 's0.example' in cheio.sites, 's204.example' in cheio.sites], [200, false, true]);
+
+  const contando = login(r1.state, 'b@x.com', DIA, 1000);
+  eq('novo tempo recalcula a partir do início da contagem', applyDuration(contando.state, 'a.example', 2 * DIA, 5000).accounts[1].until, 1000 + 2 * DIA);
+  eq('novo tempo mantém o início', applyDuration(contando.state, 'a.example', 2 * DIA, 5000).accounts[1].since, 1000);
+  eq('novo tempo não mexe em quem não conta', applyDuration(contando.state, 'a.example', 2 * DIA, 5000).accounts[0].until, null);
+
+  const base = login(contando.state, 'c@x.com', DIA, 1000).state;
+  const marcado = markAccount(base, 'a.example', 'c@x.com', DIA, 7000);
+  eq('marcar risca, conta e manda para o fim', marcado.accounts.at(-1), { host: 'a.example', email: 'c@x.com', struck: true, since: 7000, until: 7000 + DIA });
+  eq('marcar sem tempo risca e fica sem prazo', markAccount(base, 'a.example', 'c@x.com', undefined, 7000).accounts.at(-1), { host: 'a.example', email: 'c@x.com', struck: true, until: null });
+  eq('marcar e-mail desconhecido não muda nada', markAccount(base, 'a.example', 'z@x.com', DIA, 7000) === base, true);
+  const desmarcado = unmarkAccount(marcado, 'a.example', 'c@x.com');
+  eq('desmarcar tira o risco, encerra e volta para antes dos riscados', [desmarcado.accounts[0].email, desmarcado.accounts[0].struck, desmarcado.accounts[0].until, 'since' in desmarcado.accounts[0]], ['c@x.com', false, null, false]);
+  eq('login no e-mail ativo que foi marcado tira o risco', login(marcado, 'c@x.com', DIA, 8000).state.accounts.find(a => a.email === 'c@x.com').struck, false);
 
   eq('host sem www', hostOf('https://www.svc.example/login?x=1'), 'svc.example');
   eq('página interna do Chrome não tem host', hostOf('chrome://settings/'), null);

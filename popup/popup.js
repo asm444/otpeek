@@ -11,8 +11,12 @@ const DEFAULTS = {
   maxResults: 20,
   kinds: { codes: true, links: true },
   browserEnabled: false,
+  siteDurations: {},
+  customDurations: [],
 };
 
+const BASE_DURATIONS = [12 * 3_600_000, 86_400_000, 3 * 86_400_000, 7 * 86_400_000, 30 * 86_400_000];
+const DEFAULT_DURATION = 86_400_000;
 const SITE_ORIGINS = ['http://*/*', 'https://*/*'];
 
 const STATUS_TEXT = {
@@ -160,26 +164,102 @@ function renderAccounts() {
 
 function formatRemaining(ms) {
   const hours = Math.ceil(ms / 3_600_000);
-  return hours < 24 ? `${hours} h` : `${Math.ceil(hours / 24)} d`;
+  return hours <= 48 ? `${hours} h` : `${Math.ceil(hours / 24)} d`;
 }
 
-async function renderSiteLogins() {
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+function formatDuration(ms) {
+  const minutes = ms / 60_000;
+  if (minutes % 10_080 === 0) return plural(minutes / 10_080, 'semana', 'semanas');
+  if (minutes % 1_440 === 0) return plural(minutes / 1_440, 'dia', 'dias');
+  if (minutes % 60 === 0) return plural(minutes / 60, 'hora', 'horas');
+  return plural(minutes, 'minuto', 'minutos');
+}
+
+function fillDurations(select, selected, placeholder) {
+  const values = [...new Set([...BASE_DURATIONS, ...settings.customDurations, ...(selected ? [selected] : [])])].sort((a, b) => a - b);
+  const option = (value, text) => Object.assign(document.createElement('option'), { value, text });
+  select.replaceChildren(
+    ...(placeholder ? [option('', placeholder)] : []),
+    ...values.map(v => option(v, formatDuration(v))),
+    option('custom', 'Outro tempo…'),
+  );
+  select.value = selected ?? (placeholder ? '' : DEFAULT_DURATION);
+}
+
+let identitySignature = null;
+
+function renderAccountRow(account, now) {
+  const struck = account.struck && (account.until === null || account.until > now);
+  const li = document.createElement('li');
+  li.className = 'site-login';
+  const label = document.createElement('label');
+  const check = document.createElement('input');
+  check.type = 'checkbox';
+  check.checked = struck;
+  check.setAttribute('aria-label', `Contar o tempo de ${account.email}`);
+  check.addEventListener('change', () => send({ type: 'setAccountMark', host: account.host, email: account.email, marked: check.checked }));
+  const email = document.createElement('span');
+  email.className = struck ? 'email struck' : 'email';
+  email.textContent = account.email;
+  label.append(check, email);
+  const info = document.createElement('small');
+  info.textContent = !struck ? '' : account.until ? formatRemaining(account.until - now) : 'sem tempo';
+  li.append(label, info);
+  return li;
+}
+
+function renderSiteGroup(host, accounts, now) {
+  const li = document.createElement('li');
+  li.className = 'site-group';
+  const head = document.createElement('div');
+  head.className = 'site-head';
+  const name = document.createElement('strong');
+  name.textContent = host;
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', `Tempo de ${host}`);
+  const saved = settings.siteDurations[host];
+  fillDurations(select, saved, saved ? null : 'Escolher tempo');
+  select.addEventListener('change', () => {
+    if (select.value === 'custom') {
+      fillDurations(select, saved, saved ? null : 'Escolher tempo');
+      send({ type: 'askDuration', host });
+    } else {
+      send({ type: 'setDuration', host, durationMs: Number(select.value) });
+    }
+  });
+  head.append(name, select);
+  const rows = document.createElement('ul');
+  rows.append(...accounts.map(a => renderAccountRow(a, now)));
+  li.append(head, rows);
+  return li;
+}
+
+async function renderIdentity() {
   const { logins } = await chrome.storage.local.get('logins');
   const accounts = logins?.accounts ?? [];
-  $('site-logins-card').hidden = accounts.length === 0;
   const now = Date.now();
-  $('site-logins').replaceChildren(...accounts.map(a => {
-    const struck = a.struck && (a.until === null || a.until > now);
-    const li = document.createElement('li');
-    li.className = 'site-login';
-    const email = document.createElement('span');
-    email.className = struck ? 'email struck' : 'email';
-    email.textContent = a.email;
-    const info = document.createElement('small');
-    info.textContent = struck && a.until ? `${a.host} · ${formatRemaining(a.until - now)}` : a.host;
-    li.append(email, info);
-    return li;
-  }));
+  const signature = JSON.stringify([accounts, settings.siteDurations, settings.customDurations, Math.floor(now / 60_000)]);
+  if (signature === identitySignature) return;
+  identitySignature = signature;
+  $('identity-empty').hidden = accounts.length > 0;
+  const hosts = new Map();
+  for (const a of accounts) hosts.set(a.host, [...(hosts.get(a.host) ?? []), a]);
+  $('site-logins').replaceChildren(...[...hosts].map(([host, list]) => renderSiteGroup(host, list, now)));
+}
+
+let durationSignature = null;
+
+function renderDuration(host) {
+  $('duration-host').textContent = host;
+  const signature = JSON.stringify([host, settings.customDurations]);
+  if (signature === durationSignature) return;
+  durationSignature = signature;
+  fillDurations($('duration-select'), settings.siteDurations[host]);
+  $('custom-duration').hidden = true;
+  $('custom-amount').value = '';
+  showMessage('duration-error', '');
 }
 
 function setRange(id, value) {
@@ -210,7 +290,7 @@ async function render() {
   for (const r of results) if (r.isNew) highlight.add(r.id);
 
   const active = pickView(status, st.askDuration);
-  for (const name of ['duration', 'setup', 'login', 'accounts', 'list', 'settings']) $(`${name}-view`).hidden = active !== name;
+  for (const name of ['duration', 'identity', 'setup', 'login', 'accounts', 'list', 'settings']) $(`${name}-view`).hidden = active !== name;
   $('toggle-settings').setAttribute('aria-expanded', String(active === 'settings'));
   $('toggle-settings').title = active === 'settings' ? 'Voltar' : 'Opções';
   $('account-pill').setAttribute('aria-expanded', String(active === 'accounts'));
@@ -236,11 +316,12 @@ async function render() {
   $('connected').hidden = !connectedBanner || status !== 'ok';
   $('connected-email').textContent = connectedBanner || '';
 
-  if (active === 'accounts') {
-    renderAccounts();
-    await renderSiteLogins();
-  }
-  $('duration-host').textContent = st.askDuration?.host;
+  if (active === 'accounts') renderAccounts();
+  if (active === 'identity') await renderIdentity();
+  if (st.askDuration) renderDuration(st.askDuration.host);
+  else durationSignature = null;
+  $('identity-toggle').hidden = !settings.browserEnabled;
+  $('identity-toggle').setAttribute('aria-expanded', String(active === 'identity'));
   $('browser-enabled').checked = settings.browserEnabled;
 
   $('account-label').textContent = email || 'Nenhuma conta conectada';
@@ -299,9 +380,15 @@ function bindControls() {
     if (e.target.checked) e.target.checked = await chrome.permissions.request({ origins: SITE_ORIGINS });
     await send({ type: 'setBrowserEnabled', enabled: e.target.checked });
   });
+  $('duration-select').addEventListener('change', e => {
+    $('custom-duration').hidden = e.target.value !== 'custom';
+  });
   $('save-duration').addEventListener('click', async () => {
     const { askDuration } = await chrome.storage.session.get('askDuration');
-    await send({ type: 'setDuration', host: askDuration.host, durationMs: Number($('duration-select').value) });
+    const custom = $('duration-select').value === 'custom';
+    const durationMs = custom ? Number($('custom-amount').value) * Number($('custom-unit').value) : Number($('duration-select').value);
+    const r = await send({ type: 'setDuration', host: askDuration.host, durationMs, custom });
+    showMessage('duration-error', r?.ok ? '' : r?.error);
   });
   $('dismiss-duration').addEventListener('click', () => send({ type: 'dismissDuration' }));
   $('clear-logins').addEventListener('click', () => send({ type: 'clearLogins' }));
@@ -317,6 +404,11 @@ function bindControls() {
 
 $('toggle-settings').addEventListener('click', () => {
   view = view === 'settings' ? 'list' : 'settings';
+  render();
+});
+
+$('identity-toggle').addEventListener('click', () => {
+  view = view === 'identity' ? 'list' : 'identity';
   render();
 });
 

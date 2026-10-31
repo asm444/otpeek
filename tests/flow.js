@@ -332,6 +332,49 @@ async function popupFallback() {
   eq('agora não encerra o pedido', (await bg.getState()).askDuration, null);
 }
 
+async function identity() {
+  const site = 'marca.example';
+  store.local.logins = { sites: { [site]: 'um@y.com' }, accounts: [{ host: site, email: 'um@y.com', struck: false, until: null }] };
+  store.session.askDuration = null;
+  eq('marcar em site sem tempo pede o tempo', [(await dispatch({ type: 'setAccountMark', host: site, email: 'um@y.com', marked: true })).ok, (await bg.getState()).askDuration], [true, { host: site }]);
+  eq('marcar em site sem tempo risca sem prazo', store.local.logins.accounts[0].until, null);
+
+  const dia = 86_400_000;
+  const t0 = Date.now();
+  await dispatch({ type: 'setDuration', host: site, durationMs: 90 * 60_000, custom: true });
+  eq('tempo fora da lista fica salvo para todos os sites', settings().customDurations, [90 * 60_000]);
+  await dispatch({ type: 'setDuration', host: site, durationMs: 90 * 60_000, custom: true });
+  eq('tempo repetido não duplica', settings().customDurations, [90 * 60_000]);
+  const inicio = store.local.logins.accounts[0].since;
+  eq('contagem começa ao salvar o tempo', inicio >= t0, true);
+
+  await dispatch({ type: 'setDuration', host: site, durationMs: 2 * dia });
+  eq('editar o tempo recalcula a contagem em andamento', store.local.logins.accounts[0].until, inicio + 2 * dia);
+  eq('tempo da lista não vira opção personalizada', settings().customDurations, [90 * 60_000]);
+
+  store.local.logins.accounts[0].since = Date.now() - 3 * dia;
+  await dispatch({ type: 'setDuration', host: site, durationMs: dia });
+  eq('tempo novo já vencido encerra a contagem', store.local.logins.accounts[0].struck, false);
+
+  store.local.logins.accounts[0] = { host: site, email: 'um@y.com', struck: true, since: Date.now() - 2 * dia, until: Date.now() - 1000 };
+  await dispatch({ type: 'setDuration', host: site, durationMs: 7 * dia });
+  eq('editar o tempo não revive contagem já vencida', [store.local.logins.accounts[0].struck, store.local.logins.accounts[0].until], [false, null]);
+
+  eq('tempo inválido é recusado', (await dispatch({ type: 'setDuration', host: site, durationMs: NaN })).ok, false);
+  eq('tempo acima do teto é recusado', (await dispatch({ type: 'setDuration', host: site, durationMs: 367 * dia })).ok, false);
+  eq('tempo recusado não muda o salvo', settings().siteDurations[site], 7 * dia);
+
+  await dispatch({ type: 'setAccountMark', host: site, email: 'um@y.com', marked: true });
+  eq('marcar com tempo salvo conta e não pergunta', [store.local.logins.accounts[0].struck, store.local.logins.accounts[0].until > Date.now(), (await bg.getState()).askDuration], [true, true, null]);
+  await dispatch({ type: 'setAccountMark', host: site, email: 'um@y.com', marked: false });
+  eq('desmarcar encerra a contagem', [store.local.logins.accounts[0].struck, store.local.logins.accounts[0].until], [false, null]);
+  eq('página não marca conta', await send({ type: 'setAccountMark', host: site, email: 'um@y.com', marked: true }, fromSite('https://x.example/')), 'recusado');
+  await dispatch({ type: 'askDuration', host: site });
+  eq('outro tempo abre a escolha de duração', (await bg.getState()).askDuration, { host: site });
+  await dispatch({ type: 'dismissDuration' });
+  eq('tempos personalizados vão para o arquivo', JSON.parse(serializeConfig(settings())).customDurations, [90 * 60_000]);
+}
+
 async function browserToggle() {
   await dispatch({ type: 'setBrowserEnabled', enabled: false });
   eq('desligar para o script e mantém a permissão', [settings().browserEnabled, scripts.length, perms.granted], [false, 0, true]);
@@ -348,4 +391,4 @@ async function browserOff() {
   eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, browserToggle, browserOff]);
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, otherBoxes, popupFallback, identity, browserToggle, browserOff]);

@@ -2,7 +2,7 @@ import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
-import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, recordLogin } from './src/logins.js';
+import { applyDuration, emptyLogins, expireReminders, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from './src/logins.js';
 import { CONFIG_FILE, parseConfig, serializeConfig } from './src/config-file.js';
 
 export const DEFAULTS = {
@@ -17,6 +17,7 @@ export const DEFAULTS = {
   kinds: { codes: true, links: true },
   browserEnabled: false,
   siteDurations: {},
+  customDurations: [],
 };
 
 const QUERIES = {
@@ -28,6 +29,8 @@ const WATCHDOG = 'watchdog';
 const LOGIN_WINDOW_MS = 5 * 60_000;
 const CLOCK_SKEW_MS = 60_000;
 const SITE_ORIGINS = ['http://*/*', 'https://*/*'];
+const MAX_DURATION_MS = 366 * 86_400_000;
+const MAX_CUSTOM_DURATIONS = 20;
 const LOGIN_WATCH = 'login-watch';
 const FRESH = { results: [], seen: [], historyId: null, email: null };
 
@@ -345,11 +348,28 @@ async function loginDetected({ email }, sender) {
   return { ok: true };
 }
 
-async function setDuration({ host, durationMs }) {
+async function setDuration({ host, durationMs, custom }) {
+  if (!Number.isInteger(durationMs) || durationMs < 60_000 || durationMs > MAX_DURATION_MS) return { ok: false, error: 'Escolha um tempo entre 1 minuto e 366 dias.' };
   const s = await getSettings();
-  await saveSettings({ siteDurations: { ...s.siteDurations, [host]: durationMs } });
-  await saveLogins(applyDuration(await getLogins(), host, durationMs, Date.now()));
+  const customDurations = custom && !s.customDurations.includes(durationMs)
+    ? [...s.customDurations, durationMs].slice(-MAX_CUSTOM_DURATIONS)
+    : s.customDurations;
+  await saveSettings({ siteDurations: { ...s.siteDurations, [host]: durationMs }, customDurations });
+  const now = Date.now();
+  await saveLogins(expireReminders(applyDuration(expireReminders(await getLogins(), now), host, durationMs, now), now));
   await setState({ askDuration: null });
+  return { ok: true };
+}
+
+async function setAccountMark({ host, email, marked }) {
+  const logins = await getLogins();
+  if (!marked) {
+    await saveLogins(unmarkAccount(logins, host, email));
+    return { ok: true };
+  }
+  const durationMs = (await getSettings()).siteDurations[host];
+  await saveLogins(markAccount(logins, host, email, durationMs, Date.now()));
+  if (!durationMs) await setState({ askDuration: { host } });
   return { ok: true };
 }
 
@@ -369,6 +389,11 @@ const handlers = {
   saveConfig,
   loginDetected,
   setDuration,
+  setAccountMark,
+  askDuration: async ({ host }) => {
+    await setState({ askDuration: { host } });
+    return { ok: true };
+  },
   setBrowserEnabled: async ({ enabled }) => {
     await setBrowserEnabled(enabled);
     return { ok: true };
