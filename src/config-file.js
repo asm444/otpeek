@@ -3,11 +3,21 @@ export const CONFIG_FILE = 'otpeek.config.json';
 const isEmail = v => typeof v === 'string' && /^[^\s@]+@[^\s@]+$/.test(v);
 const inRange = (min, max) => v => Number.isInteger(v) && v >= min && v <= max;
 
+export function isProfilePhoto(url) {
+  if (typeof url !== 'string') return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && /(^|\.)googleusercontent\.com$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 const VALID = {
   clientId: v => typeof v === 'string' && /^[\w-]+\.apps\.googleusercontent\.com$/.test(v),
   accounts: v => Array.isArray(v) && v.every(isEmail),
   photos: v => v && typeof v === 'object' && !Array.isArray(v)
-    && Object.entries(v).every(([email, url]) => isEmail(email) && (url === null || (typeof url === 'string' && url.startsWith('https://')))),
+    && Object.entries(v).every(([email, url]) => isEmail(email) && (url === null || isProfilePhoto(url))),
   accountEmail: v => v === null || isEmail(v),
   enabled: v => typeof v === 'boolean',
   intervalSec: inRange(5, 120),

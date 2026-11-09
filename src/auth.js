@@ -1,3 +1,5 @@
+import { isProfilePhoto } from './config-file.js';
+
 const SCOPE = 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/userinfo.profile';
 const USERINFO = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
@@ -37,7 +39,7 @@ export async function profilePhoto(token) {
     const res = await fetch(USERINFO, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
     const { picture } = await res.json();
-    return typeof picture === 'string' && picture.startsWith('https://') ? picture : null;
+    return isProfilePhoto(picture) ? picture : null;
   } catch {
     return null;
   }

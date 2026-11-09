@@ -230,6 +230,11 @@ async function configParsing() {
   eq('sem client ID válido é ignorado', parseConfig(JSON.stringify({ clientId: 'abc' })), null);
   eq('campo inválido cai no padrão', parseConfig(JSON.stringify({ clientId, intervalSec: 1, scope: 'x', enabled: 'sim' })), { clientId, accounts: [], accountEmail: null });
   eq('foto fora de https é descartada', 'photos' in parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': 'javascript:alert(1)' } })), false);
+  eq('foto fora do Google é descartada', 'photos' in parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': 'https://tracker.attacker.example/p.gif?id=vitima' } })), false);
+  eq('host que só termina com o nome do Google é descartado', 'photos' in parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': 'https://evilgoogleusercontent.com/p.gif' } })), false);
+  eq('foto que não é texto é descartada', 'photos' in parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': [PHOTO_A] } })), false);
+  eq('foto em http é descartada', 'photos' in parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': PHOTO_A.replace('https:', 'http:') } })), false);
+  eq('foto do Google é aceita', parseConfig(JSON.stringify({ clientId, photos: { 'a@b.c': PHOTO_A } })).photos, { 'a@b.c': PHOTO_A });
   eq('conta atual fora da lista passa para a primeira', parseConfig(JSON.stringify({ clientId, accounts: ['a@b.c'], accountEmail: 'z@b.c' })).accountEmail, 'a@b.c');
   eq('ida e volta preserva', parseConfig(serializeConfig({ clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 })), { clientId, accounts: ['a@b.c'], accountEmail: 'a@b.c', maxResults: 5 });
 }
