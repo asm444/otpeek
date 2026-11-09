@@ -52,11 +52,25 @@ function normalizeText(s) {
     .replace(/[  -   　]/g, ' ');
 }
 
+// Bloco sem fechamento descarta o resto, como o navegador faz; assim cada busca pelo fechamento
+// percorre o texto uma vez só, e o custo fica linear no tamanho do HTML.
+function stripBlocks(html) {
+  const opener = /<(style|script|head|title)\b|<!--/gi;
+  let out = '';
+  let pos = 0;
+  for (let m; (m = opener.exec(html)); ) {
+    out += html.slice(pos, m.index) + ' ';
+    const closer = m[1] ? new RegExp(`</${m[1]}>`, 'gi') : /-->/g;
+    closer.lastIndex = opener.lastIndex;
+    if (!closer.exec(html)) return out;
+    pos = opener.lastIndex = closer.lastIndex;
+  }
+  return out + html.slice(pos);
+}
+
 export function htmlToText(html) {
   return normalizeText(decodeEntities(
-    html
-      .replace(/<(style|script|head|title)\b[\s\S]*?<\/\1>/gi, ' ')
-      .replace(/<!--[\s\S]*?-->/g, ' ')
+    stripBlocks(html)
       .replace(/<br\s*\/?>|<\/(p|div|tr|td|th|li|h[1-6]|table|section)>/gi, '\n')
       .replace(/<[^<>]{1,8192}>/g, ' ')
   ))
@@ -156,7 +170,7 @@ export function findCode(subject, body) {
 
 function linkCandidates(html, text) {
   const links = [];
-  for (const m of html.matchAll(/<a\b[^>]{0,8192}>/gi)) {
+  for (const m of html.matchAll(/<a\b[^<>]{0,8192}>/gi)) {
     const href = /\bhref\s{0,8}=\s{0,8}(["'])(.*?)\1/i.exec(m[0]);
     if (!href) continue;
     const start = m.index + m[0].length;

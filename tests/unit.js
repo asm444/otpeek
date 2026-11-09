@@ -89,6 +89,16 @@ async function predictus() {
   const inicio = performance.now();
   for (const hostil of ['<style>', '<a href="x" ', '<']) extract(msg({ subject: 'Código', html: hostil.repeat(1e6) }));
   eq('HTML hostil de até 12 MB termina em menos de 5 s', performance.now() - inicio < 5000, true);
+  for (const [nome, hostil] of [['comentário sem fechamento', '<!--'], ['style sem fechamento', '<style '], ['<a sem >', '<a ']]) {
+    const t0 = performance.now();
+    extract(msg({ subject: 'Código', html: 'code ' + hostil.repeat(1e5) }));
+    eq(`${nome} repetido até 256 KiB termina em menos de 500 ms`, performance.now() - t0 < 500, true);
+  }
+  eq('bloco sem fechamento descarta o resto', htmlToText('<p>antes</p><!-- sem fim <p>123456</p>'), 'antes');
+  eq('blocos fechados somem e o texto entre eles fica',
+    htmlToText('<style>a{}</style>um<!-- x -->dois<SCRIPT>y</script>tres'), 'um dois tres');
+  eq('dois blocos da mesma tag somem, cada um até o próprio fechamento',
+    htmlToText('<title>t</title><style>a</style>b<style>c</style>d'), 'b d');
   eq('referência numérica inválida não derruba a leitura', decodeEntities('a&#99999999;b'), 'a&#99999999;b');
 }
 
