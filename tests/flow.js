@@ -54,7 +54,7 @@ globalThis.chrome = {
     unregisterContentScripts: async () => { scripts.length = 0; },
     executeScript: async ({ target, files, args }) => {
       injected.push({ tabId: target.tabId, files, args });
-      return [{ result: files ? undefined : { filled: tabsWithField.has(target.tabId), submitted: false } }];
+      return [{ result: files ? undefined : { filled: tabsWithField.has(target.tabId) } }];
     },
   },
   tabs: { query: async () => [{ id: 9, url: 'https://ativo.example/entrar' }] },

@@ -77,7 +77,7 @@ Os códigos e links do Gmail chegam sem isto. Em **Opções**, ligue **Identific
 
 - O OTPeek lê só o campo de e-mail do formulário de login, nunca a senha, e guarda qual e-mail você usa em cada site.
 - Quando um código chega em até 5 minutos depois do login, o popup abre sozinho. O código é procurado em todas as caixas conectadas, o que cobre e-mails encaminhados.
-- Com **Colar o código na página** ligado, que vem ligado, o código também vai para o campo de código do site, só na aba onde o login foi identificado e só se ela ainda estiver no mesmo site. Sem login identificado, o código fica só no popup. Se o formulário tem um único botão de confirmar, ele é acionado; senão, o código só é colado.
+- Com **Colar o código na página** ligado, que vem ligado, o código também vai para o campo de código do site, só na aba onde o login foi identificado e só se ela ainda estiver no mesmo site. Sem login identificado, o código fica só no popup. O código só é colado: você confere e confirma.
 - Se você entrar no mesmo site com outro e-mail, o anterior fica riscado no fim da lista **Identificação de contas**, durante o tempo que você escolher para aquele site. Depois, o risco sai.
 - O ícone de conta no topo do popup abre **Identificação de contas**. Nela, você muda o tempo de cada site, o que recalcula as contagens em andamento, e marca ou desmarca um e-mail para contar o tempo. **Outro tempo…** guarda uma duração sua como opção para todos os sites.
 - Em cada site, **Limpar** apaga as contas identificadas nele, e **Bloquear** apaga e para de identificar logins naquele site. A lista **Sites bloqueados** permite desbloquear.
@@ -170,7 +170,7 @@ Gmail codes and links arrive without this. In **Opções** (Options), turn on **
 
 - OTPeek reads only the email field of the login form, never the password, and keeps which email you use on each site.
 - When a code arrives within 5 minutes of the login, the popup opens by itself. It searches every connected mailbox, which covers forwarded email.
-- With **Colar o código na página** (Paste the code on the page) on, which is the default, the code also goes into the site's code field, only in the tab where the login was identified and only if that tab is still on the same site. Without an identified login, the code stays in the popup. If the form has a single confirm button, it is pressed; otherwise the code is only pasted.
+- With **Colar o código na página** (Paste the code on the page) on, which is the default, the code also goes into the site's code field, only in the tab where the login was identified and only if that tab is still on the same site. Without an identified login, the code stays in the popup. The code is only pasted: you check it and confirm.
 - If you sign in to the same site with another email, the previous one is struck through at the end of the **Identificação de contas** list for the time you pick for that site. Then the strike goes away.
 - The account icon at the top of the popup opens **Identificação de contas** (Account identification). There you change each site's time, which recalculates running counts, and check or uncheck an email to count its time. **Outro tempo…** (Other time) keeps your own duration as an option for every site.
 - On each site, **Limpar** (Clear) deletes the accounts identified there, and **Bloquear** (Block) deletes them and stops identifying logins on that site. The **Sites bloqueados** (Blocked sites) list lets you unblock.

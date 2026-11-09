@@ -261,17 +261,13 @@ async function codeFields() {
   eq('autocomplete one-time-code recebe o código', page('<input name="q"><input autocomplete="one-time-code" name="c">').values, ['', '482913']);
   eq('campo chamado código recebe e avisa a página', [page('<label>Código de verificação <input id="v"></label>').values, page('<input name="otp">').events], [['482913'], ['otp']]);
   eq('dígitos separados recebem um caractere cada', page('<div>' + '<input maxlength="1">'.repeat(6) + '</div>').values, ['4', '8', '2', '9', '1', '3']);
-  eq('sem campo de código não preenche nada', page('<input name="busca" placeholder="Buscar"><input name="email">'), { result: { filled: false, submitted: false }, values: ['', ''], events: [], clicked: 0 });
+  eq('sem campo de código não preenche nada', page('<input name="busca" placeholder="Buscar"><input name="email">'), { result: { filled: false }, values: ['', ''], events: [], clicked: 0 });
   eq('cupom e senha não são campo de código', page('<input name="coupon_code"><input type="password" name="pin">').result.filled, false);
   eq('campo escondido ou desabilitado é ignorado', page('<input name="otp" style="display:none"><input name="code" disabled>').result.filled, false);
   const comBotao = page('<form><input name="otp"><button data-submit>Verificar</button></form>');
-  eq('com um único botão de confirmar, envia', [comBotao.result, comBotao.clicked], [{ filled: true, submitted: true }, 1]);
-  const ambiguo = page('<form><input name="otp"><button data-submit>Verificar</button><button>Outro</button></form>');
-  eq('dois botões de envio: só cola', [ambiguo.result, ambiguo.clicked], [{ filled: true, submitted: false }, 0]);
-  eq('botão de reenviar não é acionado', page('<form><input name="otp"><button data-submit>Reenviar código</button></form>').clicked, 0);
-  eq('sem formulário: só cola', page('<input name="otp">').result, { filled: true, submitted: false });
+  eq('com um único botão de confirmar, só cola e não envia', [comBotao.result, comBotao.values, comBotao.clicked], [{ filled: true }, ['482913'], 0]);
   eq('página em outro host que o do login não recebe o código',
-    page('<input autocomplete="one-time-code">', 'login.example'), { result: { filled: false, submitted: false }, values: [''], events: [], clicked: 0 });
+    page('<input autocomplete="one-time-code">', 'login.example'), { result: { filled: false }, values: [''], events: [], clicked: 0 });
 }
 
 async function versions() {
