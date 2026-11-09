@@ -242,6 +242,20 @@ async function loginForms() {
   eq('campo de texto qualquer é ignorado', detect('<input type="text" name="busca" data-v="a@x.com"><input type="password">'), null);
   eq('campo sem e-mail válido', detect('<input type="email" data-v="abc"><input type="password">'), null);
   eq('hidden é ignorado', detect('<input type="hidden" name="email" data-v="a@x.com"><input type="password">'), null);
+
+  const sent = [];
+  globalThis.chrome = { runtime: { sendMessage: m => sent.push(m) } };
+  await import('../src/login-watch.js');
+  const form = document.createElement('form');
+  form.innerHTML = '<input type="email" value="vitima@x.com"><input type="password" value="s"><button>Entrar</button>';
+  form.addEventListener('submit', e => e.preventDefault());
+  document.body.append(form);
+  form.querySelector('button').click();
+  form.requestSubmit();
+  form.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  form.remove();
+  delete globalThis.chrome;
+  eq('clique, envio e Enter disparados pela página não viram aviso de login', sent, []);
 }
 
 async function codeFields() {
