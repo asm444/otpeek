@@ -171,12 +171,12 @@ async function browserSwitch() {
 }
 
 async function receivedCode() {
-  const result = { id: 'r1', from: 'Predictus', subject: 'Código de verificação', date: Date.now(), isNew: false, items: [{ kind: 'code', value: '286282' }] };
+  const result = { id: 'r1', from: 'Predictus', address: 'no-reply@predictus.com.br', subject: 'Código de verificação', date: Date.now(), isNew: false, items: [{ kind: 'code', value: '286282' }] };
   store.session.results = [result, { ...result, id: 'r2', account: 'caixa2@gmail.com', items: [{ kind: 'code', value: '777111' }] }];
   store.session.autoShow = { id: 'r1', at: Date.now() - 14_950 };
   await update('session', { autoShow: {} });
   eq('código recebido aparece em destaque', [$('auto-code').hidden, $('auto-code-value').textContent], [false, '286282']);
-  eq('mostra o e-mail que recebeu e a mensagem', $('auto-code-meta').textContent, 'a@gmail.com · Predictus · Código de verificação');
+  eq('mostra o e-mail que recebeu e a mensagem', $('auto-code-meta').textContent, 'a@gmail.com · Predictus <no-reply@predictus.com.br> · Código de verificação');
   eq('avisa o worker que já mostrou', lastSent('clearAutoShow'), { type: 'clearAutoShow' });
   await new Promise(r => setTimeout(r, 120));
   eq('fecha sozinho depois do tempo', closed, 1);
@@ -202,6 +202,13 @@ async function links() {
   const abrir = rows[0].querySelector('a.open');
   eq('link oferece copiar e abrir em nova aba', [rows[0].querySelector('.copy').textContent, abrir?.textContent, abrir?.href, abrir?.target], ['Copiar', 'Abrir', 'https://loja.example/confirmar?t=1', '_blank']);
   eq('código não ganha botão de abrir', rows[1].querySelector('a.open'), null);
+  store.session.results = [{ id: 's1', from: 'Banco do Brasil - Segurança', address: 'golpe@attacker.example', subject: 'Código', date: Date.now(), isNew: false, items: [{ kind: 'code', value: '123456' }] },
+    { id: 's2', from: 'alerta@banco.example', address: 'alerta@banco.example', subject: 'Código', date: Date.now() - 1, isNew: false, items: [{ kind: 'code', value: '654321' }] }];
+  await update('session', { results: {} });
+  const from = [...$('list').querySelectorAll('.from')];
+  eq('remetente mostra o nome e o endereço', [from[0].querySelector('.name').textContent, from[0].querySelector('.addr').textContent, from[0].title],
+    ['Banco do Brasil - Segurança', '<golpe@attacker.example>', 'Banco do Brasil - Segurança <golpe@attacker.example>']);
+  eq('remetente sem nome não repete o endereço', [from[1].querySelector('.addr').textContent, from[1].title], ['', 'alerta@banco.example']);
   store.session.results = [];
   await update('session', { results: {} });
 }

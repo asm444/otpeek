@@ -1,6 +1,8 @@
 import { isNewer } from '../src/version.js';
 
 const $ = id => document.getElementById(id);
+const senderDetail = r => (r.address && r.address !== r.from ? `<${r.address}>` : '');
+const senderLine = r => [r.from, senderDetail(r)].filter(Boolean).join(' ');
 
 const DEFAULTS = {
   clientId: '',
@@ -101,8 +103,9 @@ function renderItem(result) {
   li.classList.toggle('new', highlight.has(result.id));
   li.classList.toggle('enter', !shown.has(result.id));
   shown.add(result.id);
-  li.querySelector('.from').textContent = result.from;
-  li.querySelector('.from').title = result.from;
+  li.querySelector('.from .name').textContent = result.from;
+  li.querySelector('.from .addr').textContent = senderDetail(result);
+  li.querySelector('.from').title = senderLine(result);
   li.querySelector('time').textContent = formatTime(result.date);
   li.querySelector('.subject').textContent = result.subject;
   li.querySelector('.subject').title = result.subject;
@@ -321,7 +324,7 @@ function showReceived(autoShow, results) {
   touched = false;
   $('auto-code').hidden = false;
   $('auto-code-value').textContent = code.value;
-  $('auto-code-meta').textContent = `${result.account ?? settings.accountEmail} · ${result.from} · ${result.subject}`;
+  $('auto-code-meta').textContent = `${result.account ?? settings.accountEmail} · ${senderLine(result)} · ${result.subject}`;
   $('auto-code-copy').onclick = () => copy($('auto-code'), $('auto-code-copy'), code.value);
   send({ type: 'clearAutoShow' });
   clearTimeout(autoCloseTimer);

@@ -84,3 +84,7 @@ export function senderName(from) {
   if (!m) return from.trim();
   return m[1].trim() || m[2].trim();
 }
+
+export function senderAddress(from) {
+  return (/<([^>]+)>/.exec(from)?.[1] ?? from).trim();
+}

@@ -1,6 +1,6 @@
 import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
-import { parseMessage, senderName } from './src/mime.js';
+import { parseMessage, senderAddress, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
 import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from './src/logins.js';
 import { RELEASES_API, parseRelease } from './src/version.js';
@@ -165,7 +165,7 @@ async function scanOtherBoxes(s, pending, seen) {
         seen.add(id);
         const msg = parseMessage(await api.get(id));
         const items = extract(msg, s.kinds);
-        if (items.length) found.push({ id, account, from: senderName(msg.from), subject: msg.subject, date: msg.date, items, isNew: true });
+        if (items.length) found.push({ id, account, from: senderName(msg.from), address: senderAddress(msg.from), subject: msg.subject, date: msg.date, items, isNew: true });
       }
     } catch {
       continue;
@@ -198,7 +198,7 @@ async function runTick() {
       const msg = parseMessage(raw);
       const items = extract(msg, s.kinds);
       if (items.length) {
-        found.push({ id, from: senderName(msg.from), subject: msg.subject, date: msg.date, items, isNew: true });
+        found.push({ id, from: senderName(msg.from), address: senderAddress(msg.from), subject: msg.subject, date: msg.date, items, isNew: true });
       }
     }
     const pending = Date.now() - st.pendingLogin?.at <= LOGIN_WINDOW_MS ? st.pendingLogin : null;

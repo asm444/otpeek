@@ -120,7 +120,7 @@ async function connectFirst() {
   eq('login conecta a conta escolhida', [r.ok, r.email, settings().accounts, settings().accountEmail], [true, 'a@gmail.com', ['a@gmail.com'], 'a@gmail.com']);
   const st = await bg.getState();
   eq('primeira leitura usa as últimas 24 h', decodeURIComponent(calls.find(c => c.key === 'GET /messages').query).includes('newer_than:1d'), true);
-  eq('lê o corpo do e-mail e acha o código', st.results.map(r => [r.id, r.from, r.items[0].value]), [['m1', 'Fish Audio', '179542']]);
+  eq('lê o corpo do e-mail e acha o código', st.results.map(r => [r.id, r.from, r.address, r.items[0].value]), [['m1', 'Fish Audio', 'noreply@fish.audio', '179542']]);
   eq('aviso de conectado e badge com o novo', [st.justConnected, badge.text], ['a@gmail.com', '1']);
   eq('token guardado só na sessão', Object.keys(st.tokens), ['a@gmail.com']);
 }

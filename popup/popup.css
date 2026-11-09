@@ -121,7 +121,9 @@ ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .item.leaving { max-height: 0 !important; opacity: 0; transform: translateX(24px); padding-top: 0; padding-bottom: 0; margin-top: -8px; }
 
 .meta { display: flex; justify-content: space-between; gap: 8px; padding-right: 22px; }
-.from { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.from { display: flex; gap: 4px; min-width: 0; font-weight: 600; white-space: nowrap; }
+.from > span { overflow: hidden; text-overflow: ellipsis; }
+.from .addr { flex-shrink: 0; max-width: 65%; color: var(--muted); font-weight: 400; }
 time { color: var(--muted); flex-shrink: 0; font-size: 12px; }
 .subject { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 22px; }
 

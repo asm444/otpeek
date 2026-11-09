@@ -5,7 +5,7 @@ import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isVali
 import '../src/login-detect.js';
 import '../src/code-fill.js';
 import { isNewer, parseRelease } from '../src/version.js';
-import { parseMessage, senderName, decodeEncodedWords } from '../src/mime.js';
+import { parseMessage, senderAddress, senderName, decodeEncodedWords } from '../src/mime.js';
 
 const msg = ({ subject = '', text = '', html = '' }) => ({ subject, text, html });
 const values = items => items.map(i => i.value);
@@ -66,6 +66,8 @@ async function mime() {
     parseMessage({ id: 'z', payload: { parts: [{ mimeType: 'text/plain', filename: 'a.txt', body: { data: b64url('código 111111') } }] } }).text, '');
   eq('remetente com nome', senderName('"Banco X" <alerta@banco.example>'), 'Banco X');
   eq('remetente só e-mail', senderName('<alerta@banco.example>'), 'alerta@banco.example');
+  eq('endereço do remetente com nome', senderAddress('"Banco do Brasil - Segurança" <golpe@attacker.example>'), 'golpe@attacker.example');
+  eq('endereço do remetente sem nome', senderAddress('alerta@banco.example'), 'alerta@banco.example');
   eq('Q-encoding', decodeEncodedWords('=?ISO-8859-1?Q?C=F3digo_de_acesso?='), 'Código de acesso');
 }
 
