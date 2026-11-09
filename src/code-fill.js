@@ -35,7 +35,10 @@ globalThis.otpeekFillCode = (() => {
     return buttons.length === 1 && !NOT_SUBMIT.test(buttons[0].textContent || buttons[0].value) ? buttons[0] : null;
   };
 
-  return (doc, code) => {
+  // A conferência do host roda no próprio documento que recebe o código, então uma navegação
+  // da aba entre o aviso de login e a colagem não leva o código para outro site.
+  return (doc, code, host) => {
+    if (location.hostname.replace(/^www\./, '') !== host) return { filled: false, submitted: false };
     const inputs = [...doc.querySelectorAll('input')].filter(usable);
     const split = splitFields(inputs, code.length);
     const field = split ? null : inputs.find(i => i.autocomplete === 'one-time-code') ?? inputs.find(isCodeField);

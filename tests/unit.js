@@ -245,7 +245,7 @@ async function loginForms() {
 }
 
 async function codeFields() {
-  const page = html => {
+  const page = (html, host = location.hostname) => {
     const box = document.createElement('div');
     box.innerHTML = html;
     document.body.append(box);
@@ -253,7 +253,7 @@ async function codeFields() {
     box.addEventListener('input', e => events.push(e.target.name || e.target.id));
     let clicked = 0;
     box.querySelector('[data-submit]')?.addEventListener('click', e => { e.preventDefault(); clicked++; });
-    const result = otpeekFillCode(box, '482913');
+    const result = otpeekFillCode(box, '482913', host);
     const values = [...box.querySelectorAll('input')].map(i => i.value);
     box.remove();
     return { result, values, events, clicked };
@@ -270,6 +270,8 @@ async function codeFields() {
   eq('dois botões de envio: só cola', [ambiguo.result, ambiguo.clicked], [{ filled: true, submitted: false }, 0]);
   eq('botão de reenviar não é acionado', page('<form><input name="otp"><button data-submit>Reenviar código</button></form>').clicked, 0);
   eq('sem formulário: só cola', page('<input name="otp">').result, { filled: true, submitted: false });
+  eq('página em outro host que o do login não recebe o código',
+    page('<input autocomplete="one-time-code">', 'login.example'), { result: { filled: false, submitted: false }, values: [''], events: [], clicked: 0 });
 }
 
 async function versions() {

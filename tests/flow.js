@@ -10,7 +10,6 @@ const perms = { granted: false, added: [], removed: [] };
 const scripts = [];
 const injected = [];
 const tabsWithField = new Set();
-let activeTab = { id: 9, url: 'https://ativo.example/entrar' };
 let popupsOpened = 0;
 let popupRefused = false;
 const popupWindows = [];
@@ -58,7 +57,7 @@ globalThis.chrome = {
       return [{ result: files ? undefined : { filled: tabsWithField.has(target.tabId), submitted: false } }];
     },
   },
-  tabs: { query: async () => [activeTab] },
+  tabs: { query: async () => [{ id: 9, url: 'https://ativo.example/entrar' }] },
   windows: { getLastFocused: async () => ({ id: 7 }), update: async (id, opts) => { windowFocus.push([id, opts.focused]); } },
   action: { openPopup: async (opts = {}) => { if (popupRefused && !opts.windowId) throw new Error('Could not find an active browser window.'); if (opts.windowId) popupWindows.push(opts.windowId); popupsOpened++; }, setBadgeText: async ({ text }) => { badge.text = text; }, setBadgeBackgroundColor: async () => {} },
 };
@@ -332,21 +331,27 @@ async function codeFill() {
     await bg.tick();
     return injected.filter(i => i.args).map(i => [i.tabId, i.args[0]]);
   };
-  await send({ type: 'loginDetected', email: 'g@y.com' }, { tab: { url: 'https://login.example/entrar', id: 41 } });
+  const login = id => send({ type: 'loginDetected', email: 'g@y.com' }, { tab: { url: 'https://www.login.example/entrar', id } });
+  await login(41);
   tabsWithField.add(41);
-  eq('código cola na aba onde o login foi identificado', await arrive('481516'), [[41, '481516']]);
+  tabsWithField.add(9);
+  eq('código cola na aba onde o login foi identificado, com o host para a página conferir', await arrive('481516'), [[41, '481516']]);
+  eq('o host vai junto do código', injected.find(i => i.args)?.args, ['481516', 'login.example']);
   eq('a aba recebe o script de preenchimento', injected[0], { tabId: 41, files: ['src/code-fill.js'], args: undefined });
 
-  await send({ type: 'loginDetected', email: 'h@y.com' }, { tab: { url: 'https://login.example/entrar', id: 42 } });
-  tabsWithField.add(9);
-  eq('sem campo na aba do login, tenta a aba visível', await arrive('234234'), [[42, '234234'], [9, '234234']]);
-  eq('sem login recente, cola na aba visível que tem o campo', await arrive('909090'), [[9, '909090']]);
+  await login(42);
+  eq('sem campo na aba do login, não tenta a aba visível', await arrive('234234'), [[42, '234234']]);
+  eq('sem login recente, não cola em aba nenhuma', await arrive('909090'), []);
 
-  store.local.settings = { ...settings(), blockedSites: ['ativo.example'] };
-  eq('site bloqueado não recebe o código', await arrive('111222'), []);
+  await login(41);
+  store.local.settings = { ...settings(), blockedSites: ['login.example'] };
+  eq('site bloqueado depois do login não recebe o código', [store.session.pendingLogin?.host, await arrive('111222')], ['login.example', []]);
   store.local.settings = { ...settings(), blockedSites: [], fillCode: false };
-  eq('interruptor desligado não cola', await arrive('333444'), []);
-  store.local.settings = { ...settings(), fillCode: true, browserEnabled: false };
+  await login(41);
+  eq('interruptor desligado não cola', [store.session.pendingLogin?.tabId, await arrive('333444')], [41, []]);
+  store.local.settings = { ...settings(), fillCode: true };
+  await login(41);
+  store.local.settings = { ...settings(), browserEnabled: false };
   eq('sem identificar logins não cola', await arrive('555666'), []);
   store.local.settings = { ...settings(), browserEnabled: true };
   eq('opção de colar vai para o arquivo de configuração', JSON.parse(serializeConfig(settings())).fillCode, true);

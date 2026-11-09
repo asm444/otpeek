@@ -144,20 +144,12 @@ async function openPopup() {
 }
 
 async function fillOnPage(s, code, pending) {
-  if (!s.browserEnabled || !s.fillCode) return;
-  const tabIds = pending?.tabId ? [pending.tabId] : [];
+  if (!s.browserEnabled || !s.fillCode || !pending?.tabId || s.blockedSites.includes(pending.host)) return;
   try {
-    const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (active?.id && !tabIds.includes(active.id) && !s.blockedSites.includes(hostOf(active.url))) tabIds.push(active.id);
+    const target = { tabId: pending.tabId };
+    await chrome.scripting.executeScript({ target, files: ['src/code-fill.js'] });
+    await chrome.scripting.executeScript({ target, func: (value, host) => globalThis.otpeekFillCode(document, value, host), args: [code, pending.host] });
   } catch {}
-  for (const tabId of tabIds) {
-    try {
-      const target = { tabId };
-      await chrome.scripting.executeScript({ target, files: ['src/code-fill.js'] });
-      const [{ result } = {}] = await chrome.scripting.executeScript({ target, func: value => globalThis.otpeekFillCode(document, value), args: [code] });
-      if (result?.filled) return;
-    } catch {}
-  }
 }
 
 async function scanOtherBoxes(s, pending, seen) {
@@ -391,7 +383,7 @@ async function loginDetected({ email }, sender) {
   const now = Date.now();
   const { state, switched, needsDuration } = recordLogin(expireReminders(await getLogins(), now), { host, email }, s.siteDurations[host], now);
   await saveLogins(state);
-  await setState({ pendingLogin: { at: now, tabId: sender.tab?.id ?? null }, ...(needsDuration ? { askDuration: { host } } : {}) });
+  await setState({ pendingLogin: { at: now, tabId: sender.tab?.id ?? null, host }, ...(needsDuration ? { askDuration: { host } } : {}) });
   if (switched) await speedUp();
   if (needsDuration) await openPopup();
   return { ok: true };
