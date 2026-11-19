@@ -15,6 +15,10 @@ export function isNewer(candidate, current) {
 
 export function parseRelease(data) {
   const version = parts(data?.tag_name);
-  const url = typeof data?.html_url === 'string' && data.html_url.startsWith('https://github.com/asm444/otpeek/') ? data.html_url : null;
+  let url = null;
+  try {
+    const parsed = new URL(data.html_url);
+    if (parsed.origin === 'https://github.com' && parsed.pathname.startsWith('/asm444/otpeek/')) url = parsed.href;
+  } catch {}
   return version && url ? { version: version.join('.'), url } : null;
 }

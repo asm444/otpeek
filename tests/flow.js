@@ -328,10 +328,10 @@ async function codeOpensPopup() {
 
 async function codeFill() {
   let n = 0;
-  const arrive = async code => {
+  const arrive = async (code, from = 'Login <no-reply@mail.login.example>') => {
     n++;
     responses.set('GET /history', { body: { historyId: `21${n}`, history: [{ messagesAdded: [{ message: { id: `fill${n}` } }] }] } });
-    responses.set('GET /messages/fill' + n, { body: message({ id: `fill${n}`, subject: 'Código', text: `Seu código: ${code}`, date: Date.now() }) });
+    responses.set('GET /messages/fill' + n, { body: message({ id: `fill${n}`, from, subject: 'Código', text: `Seu código: ${code}`, date: Date.now() }) });
     injected.length = 0;
     await bg.tick();
     return injected.filter(i => i.args).map(i => [i.tabId, i.args[0]]);
@@ -347,6 +347,11 @@ async function codeFill() {
   await login(42);
   eq('sem campo na aba do login, não tenta a aba visível', await arrive('234234'), [[42, '234234']]);
   eq('sem login recente, não cola em aba nenhuma', await arrive('909090'), []);
+
+  await login(41);
+  const abertosRelay = popupsOpened;
+  eq('código de remetente de outro site não vai para a aba do login', await arrive('551177', 'Banco <otp@banco.example>'), []);
+  eq('o código de outro remetente continua abrindo o popup', popupsOpened - abertosRelay, 1);
 
   await login(41);
   store.local.settings = { ...settings(), blockedSites: ['login.example'] };
@@ -488,6 +493,34 @@ async function fastPolling() {
   eq('popup limpa o código mostrado', (await bg.getState()).autoShow, null);
 }
 
+async function limits() {
+  const perfil = responses.get('GET /profile');
+  const lista = responses.get('GET /messages');
+  store.local.settings = { ...settings(), intervalSec: 10 };
+  let pagina = 0;
+  responses.set('GET /history', () => ({ body: { historyId: '600', nextPageToken: `p${++pagina}`, history: [{ messagesAdded: Array.from({ length: 100 }, (_, i) => ({ message: { id: `h${pagina}-${i}` } })) }] } }));
+  responses.set('GET /profile', { body: { emailAddress: settings().accountEmail, historyId: '700' } });
+  responses.set('GET /messages', { body: {} });
+  const antes = [count('GET /history'), calls.length];
+  await bg.tick();
+  eq('history sem fim para em 5 páginas e refaz a varredura', [count('GET /history') - antes[0], calls.length - antes[1], (await bg.getState()).historyId], [5, 7, '700']);
+
+  responses.set('GET /history', { status: 429, body: {} });
+  await bg.tick();
+  eq('primeira falha dobra o intervalo', [(await bg.getState()).status, await bg.pollDelaySec()], ['error', 20]);
+  await bg.tick();
+  eq('segunda falha dobra de novo', await bg.pollDelaySec(), 40);
+  for (let i = 0; i < 6; i++) await bg.tick();
+  eq('recuo tem teto de 5 minutos', await bg.pollDelaySec(), 300);
+  responses.set('GET /history', { body: { historyId: '701' } });
+  await bg.tick();
+  eq('sucesso volta ao intervalo do usuário', await bg.pollDelaySec(), 10);
+
+  responses.set('GET /profile', perfil);
+  responses.set('GET /messages', lista);
+  store.local.settings = { ...settings(), intervalSec: 600 };
+}
+
 async function updates() {
   responses.set('GET /repos/asm444/otpeek/releases/latest', { body: { tag_name: 'v9.0.0', html_url: 'https://github.com/asm444/otpeek/releases/tag/v9.0.0' } });
   responses.set('GET /history', { body: { historyId: '500' } });
@@ -515,4 +548,4 @@ async function browserOff() {
   eq('limpar apaga a lista', store.local.logins, { sites: {}, accounts: [] });
 }
 
-await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, codeFill, otherBoxes, popupFallback, blocking, identity, fastPolling, updates, browserToggle, browserOff]);
+await run([setup, connectFirst, incremental, silentRenewal, trash, secondAccount, expiredHistory, configFile, configParsing, browserWatch, codeOpensPopup, codeFill, otherBoxes, popupFallback, blocking, identity, fastPolling, limits, updates, browserToggle, browserOff]);

@@ -2,7 +2,7 @@ import { authorize, AuthError, profilePhoto } from './src/auth.js';
 import { gmailClient, ApiError } from './src/gmail.js';
 import { parseMessage, senderAddress, senderName } from './src/mime.js';
 import { extract } from './src/extract.js';
-import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from './src/logins.js';
+import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, senderMatchesHost, unmarkAccount } from './src/logins.js';
 import { RELEASES_API, parseRelease } from './src/version.js';
 import { CONFIG_FILE, parseConfig, serializeConfig } from './src/config-file.js';
 
@@ -28,6 +28,8 @@ const QUERIES = {
   all: { q: 'in:inbox', cap: 500 },
 };
 const SEEN_CAP = 2000;
+const HISTORY_CAP = 500;
+const MAX_BACKOFF_SEC = 300;
 const WATCHDOG = 'watchdog';
 const LOGIN_WINDOW_MS = 5 * 60_000;
 const CLOCK_SKEW_MS = 60_000;
@@ -48,13 +50,13 @@ async function saveSettings(patch) {
   await chrome.storage.local.set({ settings: { ...(await getSettings()), ...patch } });
 }
 
-const STATE_KEYS = ['results', 'seen', 'historyId', 'lastRun', 'status', 'error', 'email', 'justConnected', 'tokens', 'pendingLogin', 'askDuration', 'fastUntil', 'autoShow'];
+const STATE_KEYS = ['results', 'seen', 'historyId', 'lastRun', 'status', 'error', 'email', 'justConnected', 'tokens', 'pendingLogin', 'askDuration', 'fastUntil', 'autoShow', 'failures'];
 
 export async function getState() {
   const s = await chrome.storage.session.get(STATE_KEYS);
   return {
     results: [], seen: [], historyId: null, lastRun: 0, status: 'idle', error: null,
-    email: null, justConnected: null, tokens: {}, pendingLogin: null, askDuration: null, fastUntil: 0, autoShow: null, ...s,
+    email: null, justConnected: null, tokens: {}, pendingLogin: null, askDuration: null, fastUntil: 0, autoShow: null, failures: 0, ...s,
   };
 }
 
@@ -96,7 +98,7 @@ async function initialScan(api, scope) {
   return { ids: ids.slice(0, cap), historyId };
 }
 
-async function newSince(api, startHistoryId) {
+async function newSince(api, startHistoryId, scope) {
   const ids = [];
   let historyId = startHistoryId;
   let pageToken;
@@ -105,8 +107,8 @@ async function newSince(api, startHistoryId) {
     for (const h of r.history || []) for (const a of h.messagesAdded || []) ids.push(a.message.id);
     historyId = r.historyId || historyId;
     pageToken = r.nextPageToken;
-  } while (pageToken);
-  return { ids, historyId };
+  } while (pageToken && ids.length < HISTORY_CAP);
+  return pageToken ? initialScan(api, scope) : { ids, historyId };
 }
 
 function mergeResults(current, found, max) {
@@ -182,7 +184,7 @@ async function runTick() {
   const st = await getState();
   const api = clientFor(s);
   try {
-    const { ids, historyId } = st.historyId ? await newSince(api, st.historyId) : await initialScan(api, s.scope);
+    const { ids, historyId } = st.historyId ? await newSince(api, st.historyId, s.scope) : await initialScan(api, s.scope);
     const seen = new Set(st.seen);
     const found = [];
     for (const id of ids) {
@@ -205,24 +207,26 @@ async function runTick() {
     if (pending) found.push(...await scanOtherBoxes(s, pending, seen));
     const hasCode = r => r.items.some(i => i.kind === 'code');
     const codeArrived = pending && found.some(r => r.date >= pending.at - CLOCK_SKEW_MS && hasCode(r));
-    const latestCode = found.filter(hasCode).sort((a, b) => b.date - a.date)[0];
+    const codes = found.filter(hasCode).sort((a, b) => b.date - a.date);
+    const latestCode = codes[0];
+    const forSite = pending && codes.find(r => r.date >= pending.at - CLOCK_SKEW_MS && senderMatchesHost(r.address, pending.host));
     const newCode = st.historyId ? latestCode : null;
     const results = mergeResults(st.results, found, s.maxResults);
-    const patch = { results, seen: [...seen].slice(-SEEN_CAP), historyId, email: s.accountEmail, lastRun: Date.now(), status: 'ok', error: null };
+    const patch = { results, seen: [...seen].slice(-SEEN_CAP), historyId, email: s.accountEmail, lastRun: Date.now(), status: 'ok', error: null, failures: 0 };
     if (st.email !== s.accountEmail) patch.justConnected = s.accountEmail;
     if (codeArrived || !pending) patch.pendingLogin = null;
     if (newCode) Object.assign(patch, { fastUntil: 0, autoShow: { id: newCode.id, at: Date.now() } });
     await setState(patch);
     await updateBadge(results);
     if (codeArrived || newCode) {
-      await fillOnPage(s, latestCode.items.find(i => i.kind === 'code').value, pending);
+      if (forSite) await fillOnPage(s, forSite.items.find(i => i.kind === 'code').value, pending);
       await openPopup();
     }
   } catch (e) {
-    if (e instanceof AuthError) return setState({ status: 'reauth', error: e.message, lastRun: Date.now() });
+    if (e instanceof AuthError) return setState({ status: 'reauth', error: e.message, lastRun: Date.now(), failures: st.failures + 1 });
     // historyId expirado (o Gmail guarda cerca de uma semana): zera e o proximo tick refaz a varredura.
     if (e instanceof ApiError && e.status === 404 && st.historyId) return setState({ historyId: null });
-    await setState({ status: 'error', error: String(e.message || e), lastRun: Date.now() });
+    await setState({ status: 'error', error: String(e.message || e), lastRun: Date.now(), failures: st.failures + 1 });
   }
 }
 
@@ -243,8 +247,9 @@ const shouldPoll = s => s.clientId && s.accountEmail && s.enabled;
 
 export async function pollDelaySec() {
   const s = await getSettings();
-  const { fastUntil } = await getState();
-  return fastUntil > Date.now() ? FAST_INTERVAL_SEC : s.intervalSec;
+  const { fastUntil, failures } = await getState();
+  const base = fastUntil > Date.now() ? FAST_INTERVAL_SEC : s.intervalSec;
+  return Math.min(base * 2 ** failures, MAX_BACKOFF_SEC);
 }
 
 async function speedUp() {

@@ -11,6 +11,19 @@ export function hostOf(url) {
   }
 }
 
+const SECOND_LEVEL = new Set(['com', 'net', 'org', 'gov', 'edu', 'co', 'ac']);
+
+function siteOf(host) {
+  const labels = String(host).toLowerCase().split('.').filter(Boolean);
+  const size = labels.length > 2 && labels.at(-1).length === 2 && SECOND_LEVEL.has(labels.at(-2)) ? 3 : 2;
+  return labels.length >= size ? labels.slice(-size).join('.') : null;
+}
+
+export function senderMatchesHost(address, host) {
+  const site = siteOf(/@([^@\s]+)$/.exec(address)?.[1]);
+  return site !== null && site === siteOf(host);
+}
+
 export function isValidEmail(value) {
   return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }

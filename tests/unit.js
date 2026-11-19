@@ -1,7 +1,7 @@
 import { eq, run } from './harness.js';
 import { decodeEntities, extract, findCode, htmlToText } from '../src/extract.js';
 import { b64url, latin1, message } from './fixtures.js';
-import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, unmarkAccount } from '../src/logins.js';
+import { applyDuration, emptyLogins, expireReminders, forgetSite, hostOf, isValidEmail, markAccount, recordLogin, senderMatchesHost, unmarkAccount } from '../src/logins.js';
 import '../src/login-detect.js';
 import '../src/code-fill.js';
 import { isNewer, parseRelease } from '../src/version.js';
@@ -223,6 +223,13 @@ async function logins() {
 
   eq('host sem www', hostOf('https://www.svc.example/login?x=1'), 'svc.example');
   eq('página interna do Chrome não tem host', hostOf('chrome://settings/'), null);
+  eq('remetente do mesmo site, em subdomínios diferentes', senderMatchesHost('no-reply@mail.svc.example', 'app.svc.example'), true);
+  eq('remetente de outro site não casa', senderMatchesHost('no-reply@banco.example', 'evil.example'), false);
+  eq('sufixo em comum não é o mesmo site', senderMatchesHost('no-reply@banco.com.br', 'evil.com.br'), false);
+  eq('mesmo site sob com.br', senderMatchesHost('no-reply@mail.banco.com.br', 'app.banco.com.br'), true);
+  eq('domínio que só termina igual não casa', senderMatchesHost('no-reply@notsvc.example', 'svc.example'), false);
+  eq('host de um rótulo só nunca casa', senderMatchesHost('root@localhost', 'localhost'), false);
+  eq('remetente sem endereço não casa', senderMatchesHost('Serviço', 'svc.example'), false);
   eq('e-mail válido', isValidEmail('a@b.co'), true);
   eq('e-mail longo demais', isValidEmail(`${'a'.repeat(250)}@b.co`), false);
 }
@@ -294,6 +301,8 @@ async function versions() {
   eq('release válida', parseRelease({ tag_name: 'v1.2.3', html_url: 'https://github.com/asm444/otpeek/releases/tag/v1.2.3' }), { version: '1.2.3', url: 'https://github.com/asm444/otpeek/releases/tag/v1.2.3' });
   eq('link fora do repositório é recusado', parseRelease({ tag_name: 'v1.2.3', html_url: 'https://evil.example/x' }), null);
   eq('resposta sem tag é recusada', parseRelease({ message: 'Not Found' }), null);
+  eq('link que sobe para outro repositório é recusado', parseRelease({ tag_name: 'v1.2.3', html_url: 'https://github.com/asm444/otpeek/../../evil/x' }), null);
+  eq('subida codificada também é recusada', parseRelease({ tag_name: 'v1.2.3', html_url: 'https://github.com/asm444/otpeek/%2e%2e/%2e%2e/evil/x' }), null);
 }
 
 await run([versions, codes, links, mime, fishAudio, predictus, formatos, logins, loginForms, codeFields]);
